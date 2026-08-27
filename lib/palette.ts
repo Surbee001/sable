@@ -103,3 +103,121 @@ export function hexToRgb(hex: string): [number, number, number] {
     parseInt(h.slice(4, 6), 16),
   ]
 }
+
+/* ------------------------------------------------------------------ *
+ * Limited palettes
+ *
+ * The single biggest difference between a painting that reads as considered
+ * and one that reads as generated is how many pigments are in it. A painter
+ * reaches for three or four and mixes everything from them, so the picture
+ * holds together whether or not any one passage is well judged. An agent given
+ * twenty-three pigments and no guidance will use twelve.
+ * ------------------------------------------------------------------ */
+
+export type PigmentRole = 'dominant' | 'secondary' | 'accent' | 'dark'
+
+export interface PaletteScheme {
+  id: string
+  name: string
+  mood: string
+  roles: Array<{ role: PigmentRole; pigment: string }>
+  note: string
+}
+
+export const SCHEMES: PaletteScheme[] = [
+  {
+    id: 'transparent-triad',
+    name: 'Transparent triad',
+    mood: 'sunlit, clean, luminous',
+    roles: [
+      { role: 'dominant', pigment: 'aureolin' },
+      { role: 'secondary', pigment: 'permanent-rose' },
+      { role: 'accent', pigment: 'cobalt' },
+      { role: 'dark', pigment: 'indigo' },
+    ],
+    note: 'The classic three transparent primaries. Everything can be mixed from them by overlaying, and nothing ever goes muddy. Best for light-filled subjects.',
+  },
+  {
+    id: 'earth-triad',
+    name: 'Earth triad',
+    mood: 'warm, grounded, timeless',
+    roles: [
+      { role: 'dominant', pigment: 'yellow-ochre' },
+      { role: 'secondary', pigment: 'burnt-sienna' },
+      { role: 'accent', pigment: 'ultramarine' },
+      { role: 'dark', pigment: 'sepia' },
+    ],
+    note: 'Ultramarine and burnt sienna make every grey you will ever need, and both granulate, so washes have texture without any extra work.',
+  },
+  {
+    id: 'botanical',
+    name: 'Botanical',
+    mood: 'fresh, precise, a specimen on white',
+    roles: [
+      { role: 'dominant', pigment: 'sap-green' },
+      { role: 'secondary', pigment: 'quinacridone-rose' },
+      { role: 'accent', pigment: 'aureolin' },
+      { role: 'dark', pigment: 'sepia' },
+    ],
+    note: 'Staining pigments that hold a crisp edge. Leave plenty of white paper: a botanical study is mostly untouched sheet.',
+  },
+  {
+    id: 'grey-day',
+    name: 'Grey day',
+    mood: 'soft, atmospheric, low contrast',
+    roles: [
+      { role: 'dominant', pigment: 'cerulean' },
+      { role: 'secondary', pigment: 'raw-umber' },
+      { role: 'accent', pigment: 'naples-yellow' },
+      { role: 'dark', pigment: 'paynes-grey' },
+    ],
+    note: 'Everything granulates. Keep the water high and let shapes bleed into one another; hard edges will look wrong here.',
+  },
+  {
+    id: 'autumn',
+    name: 'Autumn',
+    mood: 'rich, warm, turning',
+    roles: [
+      { role: 'dominant', pigment: 'burnt-sienna' },
+      { role: 'secondary', pigment: 'olive-green' },
+      { role: 'accent', pigment: 'cadmium-yellow' },
+      { role: 'dark', pigment: 'indigo' },
+    ],
+    note: 'Warm dominant against one cool dark. Put the indigo only where you want the eye to stop.',
+  },
+  {
+    id: 'nocturne',
+    name: 'Nocturne',
+    mood: 'deep, quiet, after dark',
+    roles: [
+      { role: 'dominant', pigment: 'indigo' },
+      { role: 'secondary', pigment: 'phthalo-blue' },
+      { role: 'accent', pigment: 'burnt-sienna' },
+      { role: 'dark', pigment: 'lamp-black' },
+    ],
+    note: 'Works on toned paper. The few warm notes carry the whole picture, so use very few of them.',
+  },
+  {
+    id: 'blossom',
+    name: 'Blossom',
+    mood: 'delicate, high key, spring',
+    roles: [
+      { role: 'dominant', pigment: 'peach' },
+      { role: 'secondary', pigment: 'quinacridone-rose' },
+      { role: 'accent', pigment: 'sap-green' },
+      { role: 'dark', pigment: 'alizarin-crimson' },
+    ],
+    note: 'Keep the pigment load low, mostly under 0.5, and let the paper do the lightening rather than reaching for a paler colour.',
+  },
+]
+
+export function findScheme(query: string): PaletteScheme | null {
+  if (!query) return null
+  const q = query.trim().toLowerCase()
+  return (
+    SCHEMES.find((s) => s.id === q) ??
+    SCHEMES.find((s) => s.name.toLowerCase() === q) ??
+    SCHEMES.find((s) => s.name.toLowerCase().includes(q) || s.mood.includes(q)) ??
+    null
+  )
+}

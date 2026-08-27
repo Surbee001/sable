@@ -1,6 +1,6 @@
 import { initializeWebMCPPolyfill } from '@mcp-b/webmcp-polyfill'
 import { isValidPath, scalePath } from './geometry'
-import { PIGMENTS, resolvePigment } from './palette'
+import { PIGMENTS, SCHEMES, findScheme, getPigment, resolvePigment } from './palette'
 import { describeScene, narrateScene, snapshotRegion, snapshotScene, summariseStroke } from './snapshot'
 import { studio, type PaintInput, type StrokePatch } from './store'
 import { BRUSHES, CANVAS_H, CANVAS_W, PAPERS, type BrushKind, type PaperKind } from './types'
@@ -207,7 +207,14 @@ function coreTools(): ToolDef[] {
         const scene = studio.getScene()
         const width = Math.max(240, Math.min(1400, num(input?.width, 760) > 1 ? Number(input?.width) || 760 : 760))
         const image = snapshotScene(scene, { width })
-        return show(narrateScene(scene), image, { canvas: { width: CANVAS_W, height: CANVAS_H } })
+        const brief = studio.getBrief().trim()
+        const text = brief
+          ? `${narrateScene(scene)}\n\nThe human has left a brief pinned to the board: "${brief}"`
+          : narrateScene(scene)
+        return show(text, image, {
+          canvas: { width: CANVAS_W, height: CANVAS_H },
+          brief: brief || undefined,
+        })
       },
     },
 
@@ -306,6 +313,21 @@ function coreTools(): ToolDef[] {
         'Staining ones (phthalo blue, quinacridone rose) stay smooth and hold a hard edge.\n' +
         '  • Painting on a wet layer bleeds outward. The lowest layer is the wettest.\n' +
         '  • Leave paper white. Untouched sheet is the only true highlight you get.\n\n' +
+        'WHAT SEPARATES A PAINTING FROM A DIAGRAM. Read this before a first pass:\n' +
+        '  • Use three or four pigments for the whole picture, not twelve. Call suggest_palette ' +
+        'and stay inside what it gives you. Nothing makes an image read as generated faster ' +
+        'than every shape being a different hue.\n' +
+        '  • Build a value structure: most of the picture in a middle tone, a little of it very ' +
+        'light (bare paper), and one small area genuinely dark. Without a real dark nothing ' +
+        'else reads as light.\n' +
+        '  • Vary your edges. A form that is soft on the shadow side and crisp where the light ' +
+        'catches it looks three-dimensional; one that is uniformly crisp looks cut out of paper.\n' +
+        '  • Big shapes first, on a wet lower layer, then fewer and smaller marks on top. ' +
+        'Detail everywhere is the same as detail nowhere.\n' +
+        '  • Let shapes overlap and run together. Marks that each sit in their own space read ' +
+        'as clip art; a petal that bleeds into the one behind it reads as paint.\n' +
+        '  • Avoid symmetry and even spacing. Odd numbers, uneven gaps, one element larger ' +
+        'and closer than the rest.\n\n' +
         'Pass several strokes at once. A whole passage in one call lands as one undoable action, ' +
         'and reads to the human as one deliberate move rather than a twitchy stream.',
       inputSchema: {
@@ -552,6 +574,58 @@ function coreTools(): ToolDef[] {
     },
 
     {
+      name: 'suggest_palette',
+      description:
+        'A limited palette to paint the whole picture from, with a role for each pigment. ' +
+        'Worth calling before your first mark. Painters work from three or four pigments and mix ' +
+        'everything else by overlaying them, which is what makes a picture hold together; ' +
+        'reaching for a new hue every time a new shape appears is the single clearest signature ' +
+        'of a machine-made image. Pass a mood or a subject and you get the closest scheme, or ' +
+        'pass nothing to see them all.',
+      annotations: { readOnlyHint: true },
+      inputSchema: {
+        type: 'object',
+        properties: {
+          mood: {
+            type: 'string',
+            description:
+              'A mood or subject, e.g. "sunlit", "grey day", "botanical", "after dark", "autumn". ' +
+              'Omit to list every scheme.',
+          },
+        },
+      },
+      execute: (input: { mood?: string }) => {
+        const describe = (scheme: (typeof SCHEMES)[number]) => ({
+          id: scheme.id,
+          name: scheme.name,
+          mood: scheme.mood,
+          note: scheme.note,
+          pigments: scheme.roles.map((r) => ({
+            role: r.role,
+            id: r.pigment,
+            name: getPigment(r.pigment).name,
+            granulation: getPigment(r.pigment).granulation,
+            staining: getPigment(r.pigment).staining,
+          })),
+        })
+
+        const picked = typeof input?.mood === 'string' ? findScheme(input.mood) : null
+        if (picked) {
+          return say(
+            `${picked.name}: ${picked.mood}. ${picked.note} ` +
+              'Use the dominant across most of the picture, the secondary for the next largest ' +
+              'areas, the accent sparingly, and the dark in one small place only.',
+            { scheme: describe(picked) },
+          )
+        }
+        return say(
+          `${SCHEMES.length} limited palettes. Pick one and paint the whole study from it.`,
+          { schemes: SCHEMES.map(describe) },
+        )
+      },
+    },
+
+    {
       name: 'manage_layers',
       description:
         'Add a layer, or change one. Layers stack bottom to top and each has a wetness: painting onto a wet ' +
@@ -742,6 +816,21 @@ function contextualTools(): ToolDef[] {
     })
   }
 
+  const brief = studio.getBrief().trim()
+  if (brief) {
+    tools.push({
+      name: 'read_brief',
+      description:
+        'The human has pinned a brief to the board, and this returns it. It is standing ' +
+        'direction rather than an instruction to act on immediately: read it before deciding ' +
+        'what to paint next, and keep to it. It currently reads: ' +
+        `"${brief.length > 220 ? `${brief.slice(0, 217)}...` : brief}"`,
+      annotations: { readOnlyHint: true },
+      inputSchema: { type: 'object', properties: {} },
+      execute: () => say(brief, { brief }),
+    })
+  }
+
   if (canUndo) {
     tools.push({
       name: 'undo',
@@ -817,6 +906,9 @@ function surfaceKey(): string {
     scene.strokes.length > 0 ? 'has' : 'empty',
     canUndo ? 'u' : '-',
     canRedo ? 'r' : '-',
+    // The brief is quoted inside read_brief's description, so changing it
+    // genuinely changes the surface and has to re-register.
+    studio.getBrief().trim(),
   ].join('|')
 }
 
@@ -824,6 +916,11 @@ export interface SurfaceStatus {
   supported: boolean
   native: boolean
   toolNames: string[]
+  /** The tool the agent is inside at this moment, if any. */
+  activeTool: string | null
+  /** Tools called in the last few seconds, most recent first. */
+  recentTools: string[]
+  callCount: number
   error?: string
 }
 
@@ -837,6 +934,11 @@ class ToolSurface {
   private native = false
   private listeners = new Set<StatusListener>()
   private names: string[] = []
+  private active: string | null = null
+  private recent: string[] = []
+  private calls = 0
+  private cooldown: ReturnType<typeof setTimeout> | null = null
+  private hold: ReturnType<typeof setTimeout> | null = null
   private error?: string
   private pending: Promise<void> = Promise.resolve()
   private syncQueued = false
@@ -852,7 +954,61 @@ class ToolSurface {
       supported: this.mounted,
       native: this.native,
       toolNames: this.names,
+      activeTool: this.active,
+      recentTools: this.recent,
+      callCount: this.calls,
       error: this.error,
+    }
+  }
+
+  /**
+   * Wrap a tool so the studio can show what the agent is doing while it does
+   * it. An agent working through a page is otherwise completely silent until
+   * the moment its changes land, which makes it look like nothing is happening
+   * and then like everything happened at once.
+   */
+  private observed(tool: ToolDef): ToolDef {
+    /**
+     * Reading the sheet takes a couple of milliseconds, which is less time than
+     * it takes to paint a frame. Without a floor on how briefly the indicator
+     * can show, the fast tools would fire invisibly and only the slow ones
+     * would ever appear to run, which reads as the agent using a fraction of
+     * what it actually uses.
+     */
+    const MIN_VISIBLE = 420
+
+    return {
+      ...tool,
+      execute: async (input: never) => {
+        if (this.hold) {
+          clearTimeout(this.hold)
+          this.hold = null
+        }
+        const startedAt = Date.now()
+        this.active = tool.name
+        this.calls += 1
+        this.emit()
+
+        const settle = () => {
+          // Another call may have taken over while this one was winding down.
+          if (this.active === tool.name) this.active = null
+          this.recent = [tool.name, ...this.recent.filter((n) => n !== tool.name)].slice(0, 6)
+          this.emit()
+          if (this.cooldown) clearTimeout(this.cooldown)
+          this.cooldown = setTimeout(() => {
+            this.recent = []
+            this.emit()
+          }, 3200)
+        }
+
+        try {
+          return await tool.execute(input)
+        } finally {
+          const elapsed = Date.now() - startedAt
+          if (elapsed >= MIN_VISIBLE) settle()
+          else this.hold = setTimeout(settle, MIN_VISIBLE - elapsed)
+        }
+      },
     }
   }
 
@@ -903,7 +1059,7 @@ class ToolSurface {
     this.core = new AbortController()
     for (const tool of coreTools()) {
       try {
-        await context.registerTool(tool as never, { signal: this.core.signal })
+        await context.registerTool(this.observed(tool) as never, { signal: this.core.signal })
       } catch (err) {
         this.error = `Could not register ${tool.name}: ${err instanceof Error ? err.message : String(err)}`
       }
@@ -944,7 +1100,9 @@ class ToolSurface {
       this.contextual = new AbortController()
       for (const tool of contextualTools()) {
         try {
-          await context.registerTool(tool as never, { signal: this.contextual.signal })
+          await context.registerTool(this.observed(tool) as never, {
+            signal: this.contextual.signal,
+          })
         } catch {
           // A tool name colliding with a still-unwinding abort is not fatal.
         }

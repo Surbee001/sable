@@ -51,6 +51,15 @@ const TUNING = {
   /** Water pushing dried pigment outward into a cauliflower. */
   bloom: 0.85,
   /**
+   * Pigment separation.
+   *
+   * Real paint is a suspension of particles that do not travel together, so a
+   * single wash drifts warmer in one part and cooler in another. Without it
+   * every wash is exactly one hue, which is the flattest possible tell that
+   * something was computed rather than mixed.
+   */
+  separation: 16,
+  /**
    * Size of one granulation tile in sheet units.
    *
    * The stroke buffer is drawn through a scaled context, so a 256px tile would
@@ -606,6 +615,10 @@ function pathSpan(pts: Point[]): number {
 function spanRadius(pts: Point[]): number {
   const b = boundsOf(pts)
   return Math.max(b.w, b.h) / 2
+}
+
+function channel(n: number): number {
+  return Math.max(0, Math.min(255, Math.round(n)))
 }
 
 function clamp01(n: number): number {

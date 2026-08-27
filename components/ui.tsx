@@ -1,5 +1,6 @@
 'use client'
 
+import type { Icon } from '@phosphor-icons/react'
 import type { ReactNode } from 'react'
 
 export function Section({
@@ -66,7 +67,7 @@ export function Segmented<T extends string>({
   value,
   onChange,
 }: {
-  options: Array<{ value: T; label: string; title?: string }>
+  options: Array<{ value: T; label: string; title?: string; Icon?: Icon }>
   value: T
   onChange: (v: T) => void
 }) {
@@ -80,6 +81,7 @@ export function Segmented<T extends string>({
           onClick={() => onChange(o.value)}
           className={`seg-item${value === o.value ? ' seg-item--on' : ''}`}
         >
+          {o.Icon ? <o.Icon size={13} weight="bold" /> : null}
           {o.label}
         </button>
       ))}

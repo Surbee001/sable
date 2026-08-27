@@ -1,5 +1,6 @@
 'use client'
 
+import { Eraser } from '@phosphor-icons/react'
 import { PIGMENTS, getPigment } from '@/lib/palette'
 import { studio } from '@/lib/store'
 import { useStudio } from '@/lib/useStudio'
@@ -31,6 +32,7 @@ export function Inspector() {
         title={many ? `${selected.length} marks` : 'Selected mark'}
         action={
           <Button onClick={() => studio.erase(ids, 'human')} title="Take it back off the paper">
+            <Eraser size={11} weight="bold" />
             Lift
           </Button>
         }

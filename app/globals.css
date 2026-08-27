@@ -453,9 +453,20 @@ body {
 }
 
 .note {
+  margin: 9px 0 0;
   font-size: 10.5px;
-  line-height: 1.4;
+  line-height: 1.5;
   color: var(--text-dim);
+}
+
+/* A note sitting on a line with other things is a caption, not a paragraph. */
+.status .note,
+.byline .note {
+  margin: 0;
+}
+
+.note--spaced {
+  margin-top: 14px;
 }
 
 .quote {
@@ -497,7 +508,7 @@ body {
 /* --------------------------------------------------------------- section */
 
 .section + .section {
-  margin-top: 16px;
+  margin-top: 24px;
 }
 
 .section-head {
@@ -505,13 +516,13 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .stack {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 16px;
 }
 
 .stack-tight {
@@ -573,7 +584,17 @@ body {
 .btn--icon {
   width: 26px;
   padding: 0;
-  font-size: 13px;
+}
+
+.btn svg {
+  flex-shrink: 0;
+}
+
+.seg-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
 }
 
 .btn:focus-visible,
@@ -736,7 +757,7 @@ body {
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 3px;
+  margin-bottom: 4px;
 }
 
 .field-name {
@@ -851,6 +872,115 @@ body {
   box-shadow: inset 0 0 0 1px var(--text-faint);
 }
 
+/* ----------------------------------------------------------- agent panel */
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 12px;
+}
+
+/* What the agent is doing at this instant. An agent working through a page is
+   otherwise silent until everything lands at once. */
+.working {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 12px;
+  padding: 7px 9px;
+  border-radius: 10px;
+  background: var(--agent-soft);
+  animation: working-in 0.24s var(--ease);
+}
+
+@keyframes working-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}
+
+.working-pip {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--agent);
+  animation: working-pulse 1s ease-in-out infinite;
+}
+
+@keyframes working-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.72);
+  }
+}
+
+.working-text {
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--agent);
+}
+
+.working-text code {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 9.5px;
+  font-weight: 600;
+}
+
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.group-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 6px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.brief {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.brief-input {
+  width: 100%;
+  padding: 8px 9px;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--card-sunk);
+  border: 0;
+  border-radius: 10px;
+  resize: vertical;
+  box-shadow: inset 0 0.5px 1.5px rgba(0, 0, 0, 0.12);
+}
+
+.brief-input::placeholder {
+  color: var(--text-faint);
+}
+
+.brief-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 /* ------------------------------------------------------------- tool tags */
 
 .tag-wrap {
@@ -881,6 +1011,28 @@ body {
   color: var(--accent);
   background: var(--accent-soft);
   box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+/* The tool the agent is inside at this moment. */
+.tag--active {
+  color: #fff;
+  background: var(--agent);
+  box-shadow: 0 0 0 3px var(--agent-soft);
+  transition: none;
+  animation: tag-live 0.9s ease-in-out infinite;
+}
+
+@keyframes tag-live {
+  50% {
+    box-shadow: 0 0 0 5px var(--agent-soft);
+  }
+}
+
+/* Tools it has just finished with, so a burst of calls leaves a trail. */
+.tag--recent {
+  color: var(--agent);
+  background: var(--agent-soft);
+  box-shadow: inset 0 0 0 1px var(--agent);
 }
 
 /* ------------------------------------------------------------------ tabs */
@@ -1159,3 +1311,28 @@ body {
 .paper-hot-press { background: #fbf9f4; }
 .paper-rough { background: #f7f2e6; }
 .paper-toned { background: #efe6d4; }
+
+/* Layer visibility toggle. */
+.eye {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  color: var(--text-soft);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 0.16s var(--ease);
+}
+
+.eye:hover {
+  color: var(--text);
+}
+
+.eye--off {
+  color: var(--text-faint);
+}

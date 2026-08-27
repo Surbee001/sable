@@ -1,5 +1,6 @@
 'use client'
 
+import { CursorClick, Drop, PaintBrush, PenNib } from '@phosphor-icons/react'
 import { PIGMENTS, getPigment } from '@/lib/palette'
 import { studio } from '@/lib/store'
 import { useStudio } from '@/lib/useStudio'
@@ -36,8 +37,8 @@ export function Toolbox() {
           value={ui.mode}
           onChange={(m) => studio.setMode(m)}
           options={[
-            { value: 'paint', label: 'Paint', title: 'Shortcut: B' },
-            { value: 'select', label: 'Select', title: 'Shortcut: V' },
+            { value: 'paint', label: 'Paint', title: 'Draw with the mouse. Shortcut: B', Icon: PaintBrush },
+            { value: 'select', label: 'Select', title: 'Pick a mark up. Shortcut: V', Icon: CursorClick },
           ]}
         />
         <p className="note">
@@ -69,8 +70,8 @@ export function Toolbox() {
           value={brush.fill ? 'fill' : 'line'}
           onChange={(v) => studio.setBrush({ fill: v === 'fill' })}
           options={[
-            { value: 'line', label: 'Stroke', title: 'The path is a centreline the brush travels' },
-            { value: 'fill', label: 'Wash', title: 'The path encloses a region that floods with colour' },
+            { value: 'line', label: 'Stroke', title: 'The path is a centreline the brush travels', Icon: PenNib },
+            { value: 'fill', label: 'Wash', title: 'The path encloses a region that floods with colour', Icon: Drop },
           ]}
         />
       </Section>

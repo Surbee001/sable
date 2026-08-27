@@ -1,5 +1,6 @@
 'use client'
 
+import { Eye, EyeSlash, Plus } from '@phosphor-icons/react'
 import { studio } from '@/lib/store'
 import { useStudio } from '@/lib/useStudio'
 import { PAPERS, type PaperKind } from '@/lib/types'
@@ -16,6 +17,7 @@ export function Layers() {
           <Button
             onClick={() => studio.addLayer(`Layer ${scene.layers.length + 1}`, 0.15, 'human')}
           >
+            <Plus size={11} weight="bold" />
             Add
           </Button>
         }
@@ -39,8 +41,14 @@ export function Layers() {
                     onClick={() =>
                       studio.updateLayer(layer.id, { visible: !layer.visible }, 'human')
                     }
-                    className={`dot ${layer.visible ? 'dot--human' : 'dot--hollow'}`}
-                  />
+                    className={`eye${layer.visible ? '' : ' eye--off'}`}
+                  >
+                    {layer.visible ? (
+                      <Eye size={13} weight="bold" />
+                    ) : (
+                      <EyeSlash size={13} weight="bold" />
+                    )}
+                  </button>
                   <button
                     type="button"
                     className="grow row"

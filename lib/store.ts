@@ -1,4 +1,5 @@
 import { translatePath } from './geometry'
+import { presence } from './presence'
 import { seedScene } from './seed'
 import {
   BRUSHES,
@@ -70,6 +71,7 @@ export interface StudioSnapshot {
   scene: Scene
   ui: UiState
   activity: Activity[]
+  brief: string
   canUndo: boolean
   canRedo: boolean
 }
@@ -143,6 +145,7 @@ class Studio {
     recentAgent: [],
   }
   private activity: Activity[] = []
+  private brief = ''
   private past: Scene[] = []
   private future: Scene[] = []
   private listeners = new Set<() => void>()
@@ -162,6 +165,7 @@ class Studio {
       scene: this.scene,
       ui: this.ui,
       activity: this.activity,
+      brief: this.brief,
       canUndo: this.past.length > 0,
       canRedo: this.future.length > 0,
     }
@@ -244,6 +248,7 @@ class Studio {
 
     this.checkpoint()
     this.scene = { ...this.scene, strokes: [...this.scene.strokes, stroke] }
+    if (author === 'agent') presence.announce([stroke])
     this.log(
       author,
       'paint',
@@ -286,6 +291,7 @@ class Studio {
     }
 
     this.scene = { ...this.scene, strokes: [...this.scene.strokes, ...made] }
+    if (author === 'agent') presence.announce(made)
     this.log(
       author,
       'paint',
@@ -539,6 +545,21 @@ class Studio {
 
   setMode(mode: Mode): void {
     this.ui = { ...this.ui, mode, selection: mode === 'paint' ? [] : this.ui.selection }
+    this.emit()
+  }
+
+  getBrief = (): string => this.brief
+
+  /**
+   * Standing direction for whoever else is painting.
+   *
+   * Not a prompt: it does not make anything happen. It is the note a painter
+   * leaves pinned to the board, and the agent reads it before deciding what to
+   * do next.
+   */
+  setBrief(brief: string): void {
+    if (brief === this.brief) return
+    this.brief = brief
     this.emit()
   }
 

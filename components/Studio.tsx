@@ -1,5 +1,14 @@
 'use client'
 
+import {
+  ArrowClockwise,
+  ArrowCounterClockwise,
+  ArrowUUpLeft,
+  DownloadSimple,
+  FilePlus,
+  Moon,
+  Sun,
+} from '@phosphor-icons/react'
 import { useEffect, useState } from 'react'
 import { exportPng } from '@/lib/snapshot'
 import { studio } from '@/lib/store'
@@ -103,17 +112,19 @@ export function Studio() {
             <span className="tagline">you and the agent both hold the brush</span>
           </div>
           <div className="pill">
-            <Button onClick={() => studio.undo()} disabled={!canUndo} title="Undo">
-              Undo
+            <Button icon onClick={() => studio.undo()} disabled={!canUndo} ariaLabel="Undo" title="Undo">
+              <ArrowCounterClockwise size={14} weight="bold" />
             </Button>
             <Button
               icon
               onClick={toggleTheme}
               ariaLabel="Switch between light and dark"
+              title="Switch between light and dark"
             >
-              {theme === 'dark' ? '\u2600' : '\u263D'}
+              {theme === 'dark' ? <Sun size={14} weight="bold" /> : <Moon size={14} weight="bold" />}
             </Button>
             <Button solid onClick={download} disabled={scene.strokes.length === 0}>
+              <DownloadSimple size={13} weight="bold" />
               Export
             </Button>
           </div>
