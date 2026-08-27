@@ -1,0 +1,118 @@
+@import 'tailwindcss';
+
+/*
+  Sable runs on a dark, warm studio chrome so that the sheet of paper is the
+  brightest thing on the screen. The paper is the subject; everything else is
+  the room it hangs in.
+*/
+
+@theme {
+  --color-ink-950: #14120f;
+  --color-ink-900: #1a1714;
+  --color-ink-850: #201c18;
+  --color-ink-800: #262119;
+  --color-ink-700: #332c22;
+  --color-ink-600: #4a4034;
+  --color-ink-500: #6b5e4d;
+  --color-ink-400: #8d8172;
+  --color-ink-300: #ab9f8e;
+  --color-ink-200: #cdc3b3;
+  --color-ink-100: #e8e0d2;
+  --color-ink-50:  #f6f1e7;
+
+  --color-wash: #c9a227;
+  --color-wash-dim: #8a6f1c;
+
+  --font-display: var(--font-fraunces), Georgia, 'Times New Roman', serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--color-ink-900);
+    color: var(--color-ink-100);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior: none;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--color-wash) 35%, transparent);
+  }
+}
+
+@layer components {
+  /* Letterspaced small caps for panel headers — drafting-table labelling. */
+  .label {
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-ink-400);
+  }
+
+  .panel {
+    background: var(--color-ink-850);
+    border: 1px solid var(--color-ink-800);
+  }
+}
+
+/* Thin, unobtrusive scrollbars that match the chrome. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-ink-700) transparent;
+}
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--color-ink-700);
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-thumb:hover { background: var(--color-ink-600); }
+
+/* Sliders. The one control a painter touches constantly, so it gets real care. */
+.sable-range {
+  appearance: none;
+  height: 18px;
+  background: transparent;
+  cursor: pointer;
+}
+.sable-range::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--color-ink-700);
+}
+.sable-range::-moz-range-track {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--color-ink-700);
+}
+.sable-range::-webkit-slider-thumb {
+  appearance: none;
+  margin-top: -5.5px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-ink-100);
+  border: 1px solid var(--color-ink-600);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  transition: transform 0.1s ease;
+}
+.sable-range::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--color-ink-100);
+  border: 1px solid var(--color-ink-600);
+}
+.sable-range:hover::-webkit-slider-thumb { transform: scale(1.12); }
+.sable-range:active::-webkit-slider-thumb { transform: scale(0.96); }
+.sable-range:focus-visible { outline: none; }
+.sable-range:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-wash) 45%, transparent);
+}
