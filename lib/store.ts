@@ -255,7 +255,7 @@ class Studio {
     return stroke
   }
 
-  /** Paint several strokes as one undoable action — how an agent lays in a pass. */
+  /** Paint several strokes as one undoable action, the way an agent lays in a pass. */
   paintMany(inputs: PaintInput[], author: Author, summary?: string): Stroke[] {
     if (inputs.length === 0) return []
     this.checkpoint()
@@ -403,7 +403,7 @@ class Studio {
     return going.length
   }
 
-  /** Reorder within the paint order — later strokes sit on top. */
+  /** Reorder within the paint order. Later strokes sit on top. */
   restack(id: string, to: 'front' | 'back', author: Author): boolean {
     const stroke = this.getStroke(id)
     if (!stroke) return false

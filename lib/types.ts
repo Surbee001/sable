@@ -23,7 +23,7 @@ export interface BrushSpec {
   baseWidth: number
   /** How much the stroke tapers at its ends: 0 = blunt, 1 = fine point. */
   taper: number
-  /** Extra edge irregularity — a dry brush skips, a mop pools smoothly. */
+  /** Extra edge irregularity. A dry brush skips, a mop pools smoothly. */
   chatter: number
   hint: string
 }
@@ -35,7 +35,7 @@ export const BRUSHES: Record<BrushKind, BrushSpec> = {
     baseWidth: 26,
     taper: 0.85,
     chatter: 0.18,
-    hint: 'All-purpose sable round. Tapers to a point — petals, leaves, general shapes.',
+    hint: 'All-purpose sable round. Tapers to a point, for petals, leaves and general shapes.',
   },
   flat: {
     kind: 'flat',
@@ -43,7 +43,7 @@ export const BRUSHES: Record<BrushKind, BrushSpec> = {
     baseWidth: 46,
     taper: 0.12,
     chatter: 0.22,
-    hint: 'Square-edged wash brush. Blunt ends — skies, architecture, broad flat planes.',
+    hint: 'Square-edged wash brush. Blunt ends, for skies, architecture and broad flat planes.',
   },
   liner: {
     kind: 'liner',
@@ -67,7 +67,7 @@ export const BRUSHES: Record<BrushKind, BrushSpec> = {
     baseWidth: 34,
     taper: 0.5,
     chatter: 0.85,
-    hint: 'Barely-loaded brush. Broken, scratchy texture — bark, rock, sparkle on water.',
+    hint: 'Barely-loaded brush. Broken, scratchy texture, for bark, rock and sparkle on water.',
   },
 }
 
@@ -82,16 +82,16 @@ export interface Stroke {
   path: string
   /** Pigment id, see palette.ts */
   pigment: string
-  /** 0..1 — how wet the brush was. Drives bleed, spread and soft edges. */
+  /** 0..1. How wet the brush was. Drives bleed, spread and soft edges. */
   water: number
-  /** 0..1 — brush pressure, scales width. */
+  /** 0..1. Brush pressure, which scales the width of the mark. */
   pressure: number
-  /** 0..1 — pigment load. Low = pale tint, high = saturated. */
+  /** 0..1. Pigment load. Low is a pale tint, high is saturated. */
   opacity: number
   /**
    * How the path is interpreted.
-   *   false — a centreline the brush travels along (a stem, a contour, a line)
-   *   true  — a closed region flooded with a wash (a petal, a leaf, a sky)
+   *   false: a centreline the brush travels along (a stem, a contour, a line)
+   *   true:  a closed region flooded with a wash (a petal, a leaf, a sky)
    * This distinction matters more than it looks: it is the difference between
    * an agent drawing the outline of a flower and an agent painting one.
    */
@@ -108,7 +108,7 @@ export interface Layer {
   id: string
   name: string
   visible: boolean
-  /** 0..1 — how wet the paper was when this layer was painted. Wet paper bleeds. */
+  /** 0..1. How wet the paper was when this layer was painted. Wet paper bleeds. */
   wetness: number
   opacity: number
 }
@@ -128,7 +128,7 @@ export interface PaperSpec {
   label: string
   /** Base sheet colour. */
   base: string
-  /** Tooth depth — how strongly the grain bites pigment. */
+  /** Tooth depth, meaning how strongly the grain bites pigment. */
   tooth: number
   grain: number
   hint: string
@@ -157,7 +157,7 @@ export const PAPERS: Record<PaperKind, PaperSpec> = {
     base: '#f7f2e6',
     tooth: 1.0,
     grain: 1.0,
-    hint: 'Heavy tooth. Pigment pools in the valleys — dramatic, textural, sparkly.',
+    hint: 'Heavy tooth. Pigment pools in the valleys, so it is dramatic and sparkly.',
   },
   toned: {
     kind: 'toned',
@@ -165,6 +165,6 @@ export const PAPERS: Record<PaperKind, PaperSpec> = {
     base: '#efe6d4',
     tooth: 0.62,
     grain: 0.6,
-    hint: 'Warm buff sheet. Mid-tone ground — lets you work light against dark.',
+    hint: 'Warm buff sheet. A mid-tone ground, so you can work light against dark.',
   },
 }

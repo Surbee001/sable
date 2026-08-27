@@ -191,7 +191,7 @@ function coreTools(): ToolDef[] {
       name: 'look_at_canvas',
       description:
         'Look at the painting. Returns an image of the sheet as it currently stands, plus a written summary. ' +
-        'Call this before your first mark to see what the human has already done, and again after every pass — ' +
+        'Call this before your first mark to see what the human has already done, and again after every pass. ' +
         'watercolour behaves differently from how it reads in code, and you cannot judge a wash you have not seen.',
       annotations: { readOnlyHint: true },
       inputSchema: {
@@ -294,9 +294,9 @@ function coreTools(): ToolDef[] {
         'Paint one or more watercolour marks. This is the main way to put paint on the sheet.\n\n' +
         `THE SHEET is ${CANVAS_W} wide by ${CANVAS_H} tall, square units, origin top-left.\n\n` +
         'TWO KINDS OF MARK, and choosing right matters more than anything else here:\n' +
-        '  fill: false (default) — the path is a centreline the brush travels along. Stems, branches, ' +
+        '  fill: false (default) treats the path as a centreline the brush travels along. Stems, branches, ' +
         'contours, calligraphic lines.\n' +
-        '  fill: true — the path is a closed region flooded with a wash. Petals, leaves, skies, water, ' +
+        '  fill: true treats the path as a closed region flooded with a wash. Petals, leaves, skies, water, ' +
         'anything with area. A petal is a filled shape, not an outlined one. This is the single most ' +
         'common mistake: outlining a form instead of flooding it.\n\n' +
         'HOW THE PAINT BEHAVES, because the renderer really simulates it:\n' +
@@ -306,7 +306,7 @@ function coreTools(): ToolDef[] {
         'Staining ones (phthalo blue, quinacridone rose) stay smooth and hold a hard edge.\n' +
         '  • Painting on a wet layer bleeds outward. The lowest layer is the wettest.\n' +
         '  • Leave paper white. Untouched sheet is the only true highlight you get.\n\n' +
-        'Pass several strokes at once — a whole passage in one call lands as one undoable action, ' +
+        'Pass several strokes at once. A whole passage in one call lands as one undoable action, ' +
         'and reads to the human as one deliberate move rather than a twitchy stream.',
       inputSchema: {
         type: 'object',
@@ -353,7 +353,7 @@ function coreTools(): ToolDef[] {
         const scene = studio.getScene()
         return show(
           `Painted ${made.length} mark${made.length === 1 ? '' : 's'}. ` +
-            `Ids: ${made.map((s) => s.id).join(', ')}. Here is the sheet now — check it before painting more.`,
+            `Ids: ${made.map((s) => s.id).join(', ')}. Here is the sheet now, so check it before painting more.`,
           snapshotScene(scene, { width: 760 }),
           { painted: made.map((s) => summariseStroke(scene, s)) },
         )
@@ -689,9 +689,9 @@ function contextualTools(): ToolDef[] {
     tools.push({
       name: 'revise_selection',
       description:
-        `Revise exactly what the human currently has selected — ${subject}. ` +
+        `Revise exactly what the human currently has selected, which is ${subject}. ` +
         'Use this instead of revise_stroke when they say "make this wetter", "warm this up", ' +
-        '"push that back" — you do not need to look up an id, because they have already pointed at it.',
+        '"push that back". You do not need to look up an id, because they have already pointed at it.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -746,7 +746,7 @@ function contextualTools(): ToolDef[] {
     tools.push({
       name: 'undo',
       description:
-        'Step the whole studio back one action — including the human\'s. One shared history: ' +
+        'Step the whole studio back one action, including the human\'s. One shared history: ' +
         'if a mark you made is wrong, this takes it back off.',
       inputSchema: { type: 'object', properties: {} },
       execute: () => {
@@ -915,7 +915,7 @@ class ToolSurface {
    * Queue a rebuild of the state-dependent half of the toolbox.
    *
    * Deferred to a fresh task on purpose. Some of these tools change the very
-   * state that decides whether they exist — `undo` flips whether there is
+   * state that decides whether they exist. `undo` flips whether there is
    * anything left to undo, `clear_sheet` empties the sheet it needs in order to
    * be offered. Rebuilding synchronously inside the store notification would
    * abort the registration of the tool that is still running, and the browser

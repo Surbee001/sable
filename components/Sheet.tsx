@@ -11,6 +11,21 @@ import { paintOrder, renderScene, renderStroke } from '@/lib/watercolor'
 const MAX_DPR = 2
 /** Movement below this reads as a click, not a drag. */
 const CLICK_SLOP = 3
+const FLASH_MS = 2600
+
+/**
+ * Overlay colours come from the stylesheet rather than being written here, so
+ * selection and agent marks follow the theme like everything else. Canvas
+ * cannot take a class, so the tokens are read back off the document.
+ */
+function themeInk(): { accent: string; agent: string; guide: string } {
+  const s = getComputedStyle(document.documentElement)
+  return {
+    accent: s.getPropertyValue('--accent').trim() || '#b8791f',
+    agent: s.getPropertyValue('--agent').trim() || '#3b7fa8',
+    guide: 'rgba(40, 32, 24, 0.34)',
+  }
+}
 
 export function Sheet() {
   const { scene, ui } = useStudio()
@@ -22,10 +37,10 @@ export function Sheet() {
 
   /** What the main canvas currently shows, so we can append instead of redraw. */
   const paintedRef = useRef<Stroke[] | null>(null)
-  const drawingRef = useRef<{ points: Point[]; pointerId: number } | null>(null)
+  const drawingRef = useRef<{ points: Point[] } | null>(null)
   const dragRef = useRef<{ last: Point; moved: number; ids: string[] } | null>(null)
   const flashRef = useRef<{ ids: string[]; at: number } | null>(null)
-  const [, forceOverlay] = useState(0)
+  const [, tick] = useState(0)
 
   /* ---------------- sizing ---------------- */
 
@@ -61,34 +76,29 @@ export function Sheet() {
     const order = paintOrder(scene)
     const prev = paintedRef.current
 
-    // If the new paint order merely extends the old one — the common case while
-    // someone is painting — only the added strokes need drawing. A full sheet of
-    // washes costs hundreds of polygon fills, which is far too slow to do on
-    // every stroke, and completely unnecessary.
+    // If the new paint order merely extends the old one, which is the common
+    // case while someone is painting, only the added strokes need drawing. A
+    // full sheet of washes costs hundreds of polygon fills, far too slow to
+    // redo on every stroke and completely unnecessary.
     const isAppend =
-      prev !== null &&
-      order.length >= prev.length &&
-      prev.every((s, i) => order[i] === s)
+      prev !== null && order.length >= prev.length && prev.every((s, i) => order[i] === s)
 
     if (isAppend && order.length === prev.length) return
 
-    const tooth = PAPERS[scene.paper].tooth
-    const layerOf = new Map(scene.layers.map((l) => [l.id, l]))
-    const scaleX = size.w / CANVAS_W
-    const scaleY = size.h / CANVAS_H
-
-    const todo = isAppend ? order.slice(prev.length) : order
-    if (!isAppend) renderScene(ctx, scene, size.w, size.h)
-    else {
-      for (const stroke of todo) {
+    if (isAppend) {
+      const tooth = PAPERS[scene.paper].tooth
+      const layerOf = new Map(scene.layers.map((l) => [l.id, l]))
+      for (const stroke of order.slice(prev.length)) {
         renderStroke(
           ctx,
           stroke,
           { wetness: layerOf.get(stroke.layerId)?.wetness ?? 0, tooth },
-          scaleX,
-          scaleY,
+          size.w / CANVAS_W,
+          size.h / CANVAS_H,
         )
       }
+    } else {
+      renderScene(ctx, scene, size.w, size.h)
     }
     paintedRef.current = order
   }, [scene, size])
@@ -99,20 +109,19 @@ export function Sheet() {
     if (ui.recentAgent.length === 0) return
     flashRef.current = { ids: ui.recentAgent, at: performance.now() }
     let raf = 0
-    const tick = () => {
+    const step = () => {
       const flash = flashRef.current
       if (!flash) return
-      const age = performance.now() - flash.at
-      forceOverlay((n) => n + 1)
-      if (age > 2600) {
+      tick((n) => n + 1)
+      if (performance.now() - flash.at > FLASH_MS) {
         flashRef.current = null
         studio.clearRecentAgent()
-        forceOverlay((n) => n + 1)
+        tick((n) => n + 1)
         return
       }
-      raf = requestAnimationFrame(tick)
+      raf = requestAnimationFrame(step)
     }
-    raf = requestAnimationFrame(tick)
+    raf = requestAnimationFrame(step)
     return () => cancelAnimationFrame(raf)
   }, [ui.recentAgent])
 
@@ -127,6 +136,7 @@ export function Sheet() {
     }
     const ctx = canvas.getContext('2d')
     if (!ctx) return
+    const ink = themeInk()
 
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.clearRect(0, 0, size.w, size.h)
@@ -136,7 +146,7 @@ export function Sheet() {
     const drawing = drawingRef.current
     if (drawing && drawing.points.length > 1) {
       ctx.save()
-      ctx.strokeStyle = 'rgba(40,32,24,0.34)'
+      ctx.strokeStyle = ink.guide
       ctx.lineWidth = 1.6
       ctx.setLineDash([7, 5])
       ctx.lineJoin = 'round'
@@ -149,26 +159,23 @@ export function Sheet() {
       ctx.restore()
     }
 
-    const strokeById = new Map(scene.strokes.map((s) => [s.id, s]))
+    const byId = new Map(scene.strokes.map((s) => [s.id, s]))
 
-    // What the human has picked out.
     for (const id of ui.selection) {
-      const stroke = strokeById.get(id)
-      if (!stroke) continue
-      outline(ctx, stroke, 'rgba(201,162,39,0.95)', 2.2)
+      const stroke = byId.get(id)
+      if (stroke) outline(ctx, stroke, ink.accent, 2.2, 1)
     }
 
-    // What the agent just did — a brief pulse so it is impossible to miss.
+    // What the agent just did, pulsed briefly so it is impossible to miss.
     const flash = flashRef.current
     if (flash) {
       const age = performance.now() - flash.at
-      const t = Math.min(1, age / 2600)
+      const fade = 1 - Math.min(1, age / FLASH_MS)
       const pulse = Math.sin(age / 190) * 0.5 + 0.5
-      const alpha = (1 - t) * (0.35 + pulse * 0.45)
+      const alpha = fade * (0.35 + pulse * 0.45)
       for (const id of flash.ids) {
-        const stroke = strokeById.get(id)
-        if (!stroke) continue
-        outline(ctx, stroke, `rgba(92,168,214,${alpha.toFixed(3)})`, 2.6)
+        const stroke = byId.get(id)
+        if (stroke) outline(ctx, stroke, ink.agent, 2.6, alpha)
       }
     }
   }, [scene, size, ui.selection, ui.brush.fill])
@@ -180,8 +187,7 @@ export function Sheet() {
   /* ---------------- pointer ---------------- */
 
   const toSheet = useCallback((e: React.PointerEvent): Point => {
-    const canvas = overlayRef.current!
-    const rect = canvas.getBoundingClientRect()
+    const rect = e.currentTarget.getBoundingClientRect()
     return {
       x: ((e.clientX - rect.left) / rect.width) * CANVAS_W,
       y: ((e.clientY - rect.top) / rect.height) * CANVAS_H,
@@ -213,7 +219,7 @@ export function Sheet() {
         return
       }
 
-      drawingRef.current = { points: [pt], pointerId: e.pointerId }
+      drawingRef.current = { points: [pt] }
       drawOverlay()
     },
     [drawOverlay, scene, toSheet, ui.mode, ui.selection],
@@ -228,8 +234,8 @@ export function Sheet() {
         const dx = pt.x - drag.last.x
         const dy = pt.y - drag.last.y
         drag.moved += Math.hypot(dx, dy)
-        // Only start committing moves once it is clearly a drag, so a plain
-        // click to select does not push a no-op onto the undo stack.
+        // Only commit once it is clearly a drag, so a plain click to select
+        // does not push a no-op onto the undo stack.
         if (drag.moved > CLICK_SLOP && drag.ids.length > 0) {
           studio.move(drag.ids, dx, dy, 'human')
           drag.last = pt
@@ -249,7 +255,6 @@ export function Sheet() {
 
   const finish = useCallback(() => {
     dragRef.current = null
-
     const drawing = drawingRef.current
     drawingRef.current = null
     if (!drawing) {
@@ -265,10 +270,7 @@ export function Sheet() {
 
     const brush = studio.getUi().brush
     studio.paint(
-      {
-        path: pointsToPath(points) + (brush.fill ? ' Z' : ''),
-        fill: brush.fill,
-      },
+      { path: pointsToPath(points) + (brush.fill ? ' Z' : ''), fill: brush.fill },
       'human',
     )
     drawOverlay()
@@ -278,11 +280,10 @@ export function Sheet() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null
-      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return
+      const el = e.target as HTMLElement | null
+      if (el && ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)) return
 
-      const meta = e.metaKey || e.ctrlKey
-      if (meta && e.key.toLowerCase() === 'z') {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault()
         if (e.shiftKey) studio.redo()
         else studio.undo()
@@ -301,16 +302,14 @@ export function Sheet() {
   }, [])
 
   return (
-    <div ref={wrapRef} className="relative w-full">
-      <div
-        className="relative w-full overflow-hidden rounded-[3px] shadow-[0_30px_80px_-20px_rgba(0,0,0,0.75),0_0_0_1px_rgba(255,255,255,0.04)]"
-        style={{ aspectRatio: `${CANVAS_W} / ${CANVAS_H}` }}
-      >
-        <canvas ref={mainRef} className="absolute inset-0 h-full w-full" />
+    <div ref={wrapRef}>
+      <div className="sheet-frame">
+        <canvas ref={mainRef} className="sheet-layer" />
         <canvas
           ref={overlayRef}
-          className="absolute inset-0 h-full w-full touch-none"
-          style={{ cursor: ui.mode === 'paint' ? 'crosshair' : 'default' }}
+          className={`sheet-layer sheet-layer--interactive ${
+            ui.mode === 'paint' ? 'cursor-paint' : 'cursor-pick'
+          }`}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={finish}
@@ -326,15 +325,16 @@ function outline(
   stroke: Stroke,
   colour: string,
   width: number,
+  alpha: number,
 ): void {
-  const runs = selectionOutline(stroke)
   ctx.save()
+  ctx.globalAlpha = alpha
   ctx.strokeStyle = colour
   ctx.lineWidth = width
   ctx.lineJoin = 'round'
   ctx.lineCap = 'round'
   ctx.setLineDash(stroke.fill ? [] : [9, 6])
-  for (const run of runs) {
+  for (const run of selectionOutline(stroke)) {
     if (run.length < 2) continue
     ctx.beginPath()
     ctx.moveTo(run[0].x, run[0].y)

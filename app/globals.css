@@ -1,118 +1,1161 @@
 @import 'tailwindcss';
 
-/*
-  Sable runs on a dark, warm studio chrome so that the sheet of paper is the
-  brightest thing on the screen. The paper is the subject; everything else is
-  the room it hangs in.
-*/
+/* =========================================================================
+   Sable
 
-@theme {
-  --color-ink-950: #14120f;
-  --color-ink-900: #1a1714;
-  --color-ink-850: #201c18;
-  --color-ink-800: #262119;
-  --color-ink-700: #332c22;
-  --color-ink-600: #4a4034;
-  --color-ink-500: #6b5e4d;
-  --color-ink-400: #8d8172;
-  --color-ink-300: #ab9f8e;
-  --color-ink-200: #cdc3b3;
-  --color-ink-100: #e8e0d2;
-  --color-ink-50:  #f6f1e7;
+   The sheet of paper is the interface. Everything else floats above it as a
+   small physical card and stays out of the way. Colour, elevation and type
+   all live here rather than in the components, so nothing is styled inline.
+   ========================================================================= */
 
-  --color-wash: #c9a227;
-  --color-wash-dim: #8a6f1c;
+:root {
+  --font-ui: var(--font-figtree), ui-sans-serif, system-ui, -apple-system, sans-serif;
 
-  --font-display: var(--font-fraunces), Georgia, 'Times New Roman', serif;
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  /* Studio surface. Warm grey, so the paper reads as the brightest thing. */
+  --bg: #e9e7e3;
+  --bg-deep: #ded9d2;
+  --card: #fdfcfa;
+  --card-sunk: #f0eeea;
+  --card-raised: #ffffff;
+
+  --text: #282828;
+  --text-soft: #5d5952;
+  --text-dim: #8f8a82;
+  --text-faint: #b0aaa1;
+
+  --line: rgba(0, 0, 0, 0.09);
+  --line-soft: rgba(0, 0, 0, 0.055);
+
+  --accent: #b8791f;
+  --accent-soft: rgba(184, 121, 31, 0.14);
+  --agent: #3b7fa8;
+  --agent-soft: rgba(59, 127, 168, 0.13);
+
+  /* The floating card. Two hairlines and two insets give it a real edge
+     instead of a drop shadow pretending to be one. */
+  --lift:
+    0 4px 16px rgba(0, 0, 0, 0.06),
+    0 0.75px 0.25px rgba(0, 0, 0, 0.2),
+    0 -0.75px 0.25px rgba(255, 255, 255, 0.7),
+    inset 0 -0.75px 1.25px rgba(0, 0, 0, 0.14),
+    inset 0 0.75px 1.5px rgba(255, 255, 255, 0.7);
+  --lift-low:
+    0 2px 8px rgba(0, 0, 0, 0.05),
+    0 0.5px 0.25px rgba(0, 0, 0, 0.16),
+    inset 0 0.75px 1px rgba(255, 255, 255, 0.6);
+  --lift-sheet:
+    0 18px 48px -12px rgba(0, 0, 0, 0.26),
+    0 2px 6px rgba(0, 0, 0, 0.08),
+    0 0 0 0.75px rgba(0, 0, 0, 0.14);
+
+  --radius-card: 20px;
+  --radius-inner: 12px;
+  --radius-pill: 999px;
+
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-@layer base {
-  html {
-    color-scheme: dark;
-  }
+/* Dark studio. Same structure, inverted lighting: the insets flip so cards
+   still read as objects catching light from above. */
+:root[data-theme='dark'] {
+  --bg: #1a1917;
+  --bg-deep: #121110;
+  --card: #232220;
+  --card-sunk: #1c1b19;
+  --card-raised: #2a2825;
 
-  body {
-    background-color: var(--color-ink-900);
-    color: var(--color-ink-100);
-    font-family: var(--font-sans);
-    -webkit-font-smoothing: antialiased;
-    overscroll-behavior: none;
-  }
+  --text: #ece8e1;
+  --text-soft: #b6b0a6;
+  --text-dim: #8a847a;
+  --text-faint: #635e56;
 
-  ::selection {
-    background: color-mix(in srgb, var(--color-wash) 35%, transparent);
+  --line: rgba(255, 255, 255, 0.09);
+  --line-soft: rgba(255, 255, 255, 0.055);
+
+  --accent: #d9a34a;
+  --accent-soft: rgba(217, 163, 74, 0.16);
+  --agent: #6fb2d8;
+  --agent-soft: rgba(111, 178, 216, 0.16);
+
+  --lift:
+    0 6px 20px rgba(0, 0, 0, 0.42),
+    0 0.75px 0.25px rgba(0, 0, 0, 0.6),
+    0 -0.75px 0.25px rgba(255, 255, 255, 0.09),
+    inset 0 -0.75px 1.25px rgba(0, 0, 0, 0.5),
+    inset 0 0.75px 1.5px rgba(255, 255, 255, 0.09);
+  --lift-low:
+    0 3px 10px rgba(0, 0, 0, 0.36),
+    0 0.5px 0.25px rgba(0, 0, 0, 0.5),
+    inset 0 0.75px 1px rgba(255, 255, 255, 0.07);
+  --lift-sheet:
+    0 24px 60px -14px rgba(0, 0, 0, 0.7),
+    0 2px 8px rgba(0, 0, 0, 0.4),
+    0 0 0 0.75px rgba(255, 255, 255, 0.07);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #1a1917;
+    --bg-deep: #121110;
+    --card: #232220;
+    --card-sunk: #1c1b19;
+    --card-raised: #2a2825;
+
+    --text: #ece8e1;
+    --text-soft: #b6b0a6;
+    --text-dim: #8a847a;
+    --text-faint: #635e56;
+
+    --line: rgba(255, 255, 255, 0.09);
+    --line-soft: rgba(255, 255, 255, 0.055);
+
+    --accent: #d9a34a;
+    --accent-soft: rgba(217, 163, 74, 0.16);
+    --agent: #6fb2d8;
+    --agent-soft: rgba(111, 178, 216, 0.16);
+
+    --lift:
+      0 6px 20px rgba(0, 0, 0, 0.42),
+      0 0.75px 0.25px rgba(0, 0, 0, 0.6),
+      0 -0.75px 0.25px rgba(255, 255, 255, 0.09),
+      inset 0 -0.75px 1.25px rgba(0, 0, 0, 0.5),
+      inset 0 0.75px 1.5px rgba(255, 255, 255, 0.09);
+    --lift-low:
+      0 3px 10px rgba(0, 0, 0, 0.36),
+      0 0.5px 0.25px rgba(0, 0, 0, 0.5),
+      inset 0 0.75px 1px rgba(255, 255, 255, 0.07);
+    --lift-sheet:
+      0 24px 60px -14px rgba(0, 0, 0, 0.7),
+      0 2px 8px rgba(0, 0, 0, 0.4),
+      0 0 0 0.75px rgba(255, 255, 255, 0.07);
   }
 }
 
-@layer components {
-  /* Letterspaced small caps for panel headers — drafting-table labelling. */
-  .label {
-    font-size: 0.625rem;
-    font-weight: 600;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--color-ink-400);
-  }
-
-  .panel {
-    background: var(--color-ink-850);
-    border: 1px solid var(--color-ink-800);
-  }
-}
-
-/* Thin, unobtrusive scrollbars that match the chrome. */
 * {
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-ink-700) transparent;
+  box-sizing: border-box;
 }
-*::-webkit-scrollbar { width: 8px; height: 8px; }
-*::-webkit-scrollbar-track { background: transparent; }
-*::-webkit-scrollbar-thumb {
-  background: var(--color-ink-700);
-  border-radius: 4px;
-}
-*::-webkit-scrollbar-thumb:hover { background: var(--color-ink-600); }
 
-/* Sliders. The one control a painter touches constantly, so it gets real care. */
-.sable-range {
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+}
+
+body {
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.45;
+  letter-spacing: -0.005em;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+/* ---------------------------------------------------------------- layout */
+
+.studio {
+  position: relative;
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 100% at 50% 0%, var(--bg) 0%, var(--bg-deep) 100%);
+}
+
+/* The sheet sits in the middle and everything else floats over it. */
+.stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 84px 20px 20px;
+}
+
+.stage-inner {
+  width: 100%;
+  /* The third term is the width at which a 10:7 sheet exactly fills the
+     available height, so the paper is bounded by whichever runs out first. */
+  max-width: min(1180px, calc(100vw - 440px), calc((100dvh - 128px) * 10 / 7));
+  transition: max-width 0.4s var(--ease);
+}
+
+.stage-inner--wide {
+  max-width: min(1400px, calc(100vw - 80px), calc((100dvh - 128px) * 10 / 7));
+}
+
+@media (max-width: 1120px) {
+  .stage-inner,
+  .stage-inner--wide {
+    max-width: min(calc(100vw - 32px), calc((100dvh - 190px) * 10 / 7));
+  }
+  .stage {
+    padding: 72px 16px 104px;
+  }
+  .float-top {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .spacer {
+    display: none;
+  }
+}
+
+.sheet-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1000 / 700;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: var(--lift-sheet);
+}
+
+.sheet-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.sheet-layer--interactive {
+  touch-action: none;
+}
+
+.cursor-paint {
+  cursor: crosshair;
+}
+
+.cursor-pick {
+  cursor: default;
+}
+
+/* ----------------------------------------------------------- floating ui */
+
+.float {
+  position: absolute;
+  z-index: 20;
+}
+
+.float-top {
+  top: 16px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.float-top > * {
+  pointer-events: auto;
+}
+
+.float-left {
+  top: 50%;
+  left: 16px;
+  transform: translateY(-50%);
+  width: 196px;
+  max-height: calc(100dvh - 140px);
+}
+
+.float-right {
+  top: 50%;
+  right: 16px;
+  transform: translateY(-50%);
+  width: 244px;
+  max-height: calc(100dvh - 120px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  padding: 2px;
+  margin: -2px;
+}
+
+.float-right > .card {
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.float--hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%) scale(0.97);
+}
+
+.float-top.float--hidden {
+  transform: translateY(-8px);
+}
+
+.float,
+.float-left,
+.float-right {
+  transition:
+    opacity 0.28s var(--ease),
+    transform 0.34s var(--ease);
+}
+
+/* Narrow layout. One dock along the bottom holding everything, collapsed to
+   its tab bar until a tab is chosen, so the paper keeps the screen. */
+.dock {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition:
+    opacity 0.28s var(--ease),
+    transform 0.34s var(--ease);
+}
+
+.dock.float--hidden {
+  transform: translateY(16px);
+}
+
+.dock-body {
+  max-height: 44dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.dock-bar {
+  padding: 5px;
+}
+
+/* The dock's tab strip is the card, so it should not draw a second surface
+   inside one. */
+.dock-tabs {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border-radius: inherit;
+}
+
+.dock-tabs .tab {
+  padding: 8px 6px;
+  font-size: 11.5px;
+  border-radius: var(--radius-pill);
+}
+
+/* --------------------------------------------------------------- surface */
+
+.card {
+  background: var(--card);
+  border-radius: var(--radius-card);
+  box-shadow: var(--lift);
+  padding: 14px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.card--flush {
+  padding: 0;
+  overflow: hidden;
+}
+
+.pill {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 5px;
+  background: var(--card);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--lift);
+}
+
+.pill--text {
+  padding: 7px 14px;
+  gap: 9px;
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.spacer {
+  flex: 1;
+  min-width: 0;
+}
+
+.pill--title {
+  min-width: 200px;
+  max-width: 34vw;
+  justify-content: center;
+}
+
+@media (max-width: 760px) {
+  .pill--title,
+  .tagline {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------------ type */
+
+.wordmark {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.tagline {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.label {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.title-field {
+  min-width: 0;
+  max-width: 30vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-soft);
+  background: none;
+  border: 0;
+  border-radius: var(--radius-pill);
+  padding: 3px 8px;
+  cursor: text;
+  text-align: center;
+}
+
+.title-field:hover {
+  color: var(--text);
+  background: var(--card-sunk);
+}
+
+.title-field:focus {
+  outline: none;
+  background: var(--card-sunk);
+  color: var(--text);
+}
+
+.note {
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--text-dim);
+}
+
+.quote {
+  font-size: 10.5px;
+  line-height: 1.45;
+  font-style: italic;
+  color: var(--text-soft);
+  border-left: 1.5px solid var(--line);
+  padding-left: 8px;
+}
+
+.mono {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.path-code {
+  display: block;
+  max-height: 66px;
+  overflow-y: auto;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--card-sunk);
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 9px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+
+.byline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+/* --------------------------------------------------------------- section */
+
+.section + .section {
+  margin-top: 16px;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.stack-tight {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* --------------------------------------------------------------- buttons */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-soft);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.16s var(--ease),
+    color 0.16s var(--ease),
+    transform 0.16s var(--ease);
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--card-sunk);
+  color: var(--text);
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.btn:disabled {
+  opacity: 0.32;
+  cursor: default;
+}
+
+.btn--solid {
+  background: var(--text);
+  color: var(--card);
+  box-shadow: var(--lift-low);
+}
+
+.btn--solid:hover:not(:disabled) {
+  background: var(--text);
+  color: var(--card);
+  filter: brightness(1.15);
+}
+
+.btn--icon {
+  width: 26px;
+  padding: 0;
+  font-size: 13px;
+}
+
+.btn:focus-visible,
+.swatch:focus-visible,
+.seg-item:focus-visible,
+.row:focus-visible,
+.tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1.5px;
+}
+
+/* -------------------------------------------------------------- segments */
+
+.seg {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--card-sunk);
+  border-radius: 10px;
+}
+
+.seg-item {
+  flex: 1;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-dim);
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition:
+    background 0.18s var(--ease),
+    color 0.18s var(--ease);
+}
+
+.seg-item:hover {
+  color: var(--text-soft);
+}
+
+.seg-item--on {
+  background: var(--card-raised);
+  color: var(--text);
+  box-shadow: var(--lift-low);
+}
+
+/* ------------------------------------------------------------------ rows */
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 5px 7px;
+  font: inherit;
+  text-align: left;
+  color: var(--text-soft);
+  background: transparent;
+  border: 0;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background 0.16s var(--ease);
+}
+
+.row:hover {
+  background: var(--card-sunk);
+}
+
+.row--on {
+  background: var(--card-sunk);
+  color: var(--text);
+}
+
+.row-title {
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.row-sub {
+  display: block;
+  font-size: 9.5px;
+  color: var(--text-faint);
+}
+
+/* -------------------------------------------------------------- swatches */
+
+.swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+}
+
+.swatch {
+  aspect-ratio: 1;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow:
+    inset 0 0 0 0.5px rgba(0, 0, 0, 0.22),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.18);
+  transition: transform 0.16s var(--ease);
+}
+
+.swatch:hover {
+  transform: scale(1.16);
+}
+
+.swatch--on {
+  box-shadow:
+    inset 0 0 0 0.5px rgba(0, 0, 0, 0.22),
+    0 0 0 2px var(--card),
+    0 0 0 3.5px var(--text);
+}
+
+.paper-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px;
+}
+
+.paper {
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 500;
+  text-align: left;
+  color: var(--text-dim);
+  background: transparent;
+  border: 0;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background 0.16s var(--ease);
+}
+
+.paper:hover {
+  background: var(--card-sunk);
+  color: var(--text-soft);
+}
+
+.paper--on {
+  background: var(--card-sunk);
+  color: var(--text);
+}
+
+.paper-chip {
+  display: block;
+  height: 5px;
+  margin-bottom: 5px;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.16);
+}
+
+/* --------------------------------------------------------------- sliders */
+
+.field-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+
+.field-name {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-soft);
+}
+
+.field-value {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
+
+.range {
   appearance: none;
-  height: 18px;
+  width: 100%;
+  height: 16px;
   background: transparent;
   cursor: pointer;
 }
-.sable-range::-webkit-slider-runnable-track {
+
+.range::-webkit-slider-runnable-track {
   height: 3px;
   border-radius: 2px;
-  background: var(--color-ink-700);
+  background: var(--card-sunk);
+  box-shadow: inset 0 0.5px 1px rgba(0, 0, 0, 0.16);
 }
-.sable-range::-moz-range-track {
+
+.range::-moz-range-track {
   height: 3px;
   border-radius: 2px;
-  background: var(--color-ink-700);
+  background: var(--card-sunk);
 }
-.sable-range::-webkit-slider-thumb {
+
+.range::-webkit-slider-thumb {
   appearance: none;
   margin-top: -5.5px;
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: var(--color-ink-100);
-  border: 1px solid var(--color-ink-600);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-  transition: transform 0.1s ease;
+  background: var(--card-raised);
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.28),
+    inset 0 0 0 0.5px rgba(0, 0, 0, 0.24);
+  transition: transform 0.12s var(--ease);
 }
-.sable-range::-moz-range-thumb {
+
+.range::-moz-range-thumb {
   width: 13px;
   height: 13px;
+  border: 0;
   border-radius: 50%;
-  background: var(--color-ink-100);
-  border: 1px solid var(--color-ink-600);
+  background: var(--card-raised);
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.28),
+    inset 0 0 0 0.5px rgba(0, 0, 0, 0.24);
 }
-.sable-range:hover::-webkit-slider-thumb { transform: scale(1.12); }
-.sable-range:active::-webkit-slider-thumb { transform: scale(0.96); }
-.sable-range:focus-visible { outline: none; }
-.sable-range:focus-visible::-webkit-slider-thumb {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-wash) 45%, transparent);
+
+.range:hover::-webkit-slider-thumb {
+  transform: scale(1.12);
 }
+
+.range:focus-visible {
+  outline: none;
+}
+
+.range:focus-visible::-webkit-slider-thumb {
+  box-shadow:
+    0 0 0 3px var(--accent-soft),
+    inset 0 0 0 0.5px rgba(0, 0, 0, 0.24);
+}
+
+.range--mini {
+  width: 46px;
+  opacity: 0;
+  transition: opacity 0.18s var(--ease);
+}
+
+.row:hover .range--mini {
+  opacity: 1;
+}
+
+/* ------------------------------------------------------------------ dots */
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dot--human {
+  background: var(--accent);
+}
+
+.dot--agent {
+  background: var(--agent);
+}
+
+.dot--live {
+  background: #3fae72;
+}
+
+.dot--off {
+  background: var(--text-faint);
+}
+
+.dot--hollow {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--text-faint);
+}
+
+/* ------------------------------------------------------------- tool tags */
+
+.tag-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.tag {
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 9px;
+  color: var(--text-dim);
+  background: var(--card-sunk);
+  transition:
+    background 0.5s var(--ease),
+    color 0.5s var(--ease),
+    box-shadow 0.5s var(--ease);
+}
+
+.tag--contextual {
+  color: var(--agent);
+  background: var(--agent-soft);
+}
+
+.tag--new {
+  color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+/* ------------------------------------------------------------------ tabs */
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--card-sunk);
+  border-radius: 10px;
+  margin-bottom: 10px;
+}
+
+.tab {
+  flex: 1;
+  padding: 4px 6px;
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--text-dim);
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+  transition:
+    background 0.18s var(--ease),
+    color 0.18s var(--ease);
+}
+
+.tab:hover {
+  color: var(--text-soft);
+}
+
+.tab--on {
+  background: var(--card-raised);
+  color: var(--text);
+  box-shadow: var(--lift-low);
+}
+
+/* ------------------------------------------------------------------- log */
+
+.log {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.log-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  width: 100%;
+  padding: 4px 6px;
+  font: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 0.16s var(--ease);
+}
+
+.log-item:hover:not(:disabled) {
+  background: var(--card-sunk);
+}
+
+.log-item:disabled {
+  cursor: default;
+}
+
+.log-dot {
+  margin-top: 5px;
+}
+
+.log-text {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-soft);
+}
+
+.log-who {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.log-who--agent {
+  color: var(--agent);
+}
+
+.log-verb {
+  color: var(--text-faint);
+}
+
+/* --------------------------------------------------------------- welcome */
+
+.veil {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--bg-deep) 72%, transparent);
+  backdrop-filter: blur(14px) saturate(1.1);
+  animation: veil-in 0.4s var(--ease);
+}
+
+@keyframes veil-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.welcome {
+  width: 100%;
+  max-width: 520px;
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+  padding: 30px 30px 24px;
+  background: var(--card);
+  border-radius: 24px;
+  box-shadow: var(--lift);
+  animation: welcome-in 0.5s var(--ease);
+}
+
+@keyframes welcome-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+}
+
+.welcome-eyebrow {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.welcome-title {
+  margin: 10px 0 0;
+  font-size: 34px;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  color: var(--text);
+}
+
+.welcome-lede {
+  margin: 8px 0 20px;
+  font-size: 15px;
+  line-height: 1.35;
+  letter-spacing: -0.015em;
+  color: var(--text-soft);
+}
+
+.welcome-body {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  margin-bottom: 22px;
+}
+
+.welcome-point {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+}
+
+.welcome-num {
+  flex-shrink: 0;
+  width: 19px;
+  height: 19px;
+  margin-top: 1px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--card-sunk);
+  box-shadow: var(--lift-low);
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.welcome-point p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-soft);
+}
+
+.welcome-point strong {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.welcome-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.btn--start {
+  height: 36px;
+  padding: 0 20px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* ---------------------------------------------------------------- scroll */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Pigment and paper swatches. One class per entry, so that no colour is ever
+   written into a style attribute. Adding a pigment to lib/palette.ts means
+   adding its class here; the swatch falls back to transparent otherwise. */
+
+.pig-quinacridone-rose { background: #c9256b; }
+.pig-permanent-rose { background: #d4457e; }
+.pig-alizarin-crimson { background: #9e1b32; }
+.pig-cadmium-red { background: #d93a1f; }
+.pig-peach { background: #f0937a; }
+.pig-cadmium-yellow { background: #f6b800; }
+.pig-aureolin { background: #f5cf3d; }
+.pig-naples-yellow { background: #efd9a3; }
+.pig-yellow-ochre { background: #c68f36; }
+.pig-ultramarine { background: #2a4a9c; }
+.pig-cerulean { background: #3f8fc4; }
+.pig-phthalo-blue { background: #0d5c8c; }
+.pig-cobalt { background: #2f63b5; }
+.pig-indigo { background: #22364f; }
+.pig-sap-green { background: #5a7a2b; }
+.pig-viridian { background: #1f7a63; }
+.pig-olive-green { background: #6e7331; }
+.pig-burnt-sienna { background: #a4502a; }
+.pig-raw-umber { background: #7a5c33; }
+.pig-sepia { background: #5b4028; }
+.pig-paynes-grey { background: #3d4d5c; }
+.pig-neutral-tint { background: #4a4a52; }
+.pig-lamp-black { background: #26262b; }
+
+.paper-cold-press { background: #faf6ee; }
+.paper-hot-press { background: #fbf9f4; }
+.paper-rough { background: #f7f2e6; }
+.paper-toned { background: #efe6d4; }

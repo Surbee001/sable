@@ -162,7 +162,7 @@ function getPaperTile(): HTMLCanvasElement {
 /**
  * Coarse, high-contrast clumping for granulation.
  *
- * Granulating pigments — ultramarine, cerulean, burnt sienna — are made of
+ * Granulating pigments such as ultramarine, cerulean and burnt sienna are made of
  * comparatively heavy particles that sink into the valleys of the paper before
  * the water evaporates. The result is not fine grain but visible mottling, so
  * this tile is deliberately low-frequency and hard-contrasted.
@@ -211,7 +211,7 @@ export function renderPaper(
     ctx.fillRect(0, 0, w, h)
   }
 
-  // Paper never dries perfectly flat — the faintest corner shading.
+  // Paper never dries perfectly flat, so the corners take the faintest shading.
   ctx.globalCompositeOperation = 'multiply'
   ctx.globalAlpha = 1
   const vignette = ctx.createRadialGradient(
@@ -251,8 +251,8 @@ function getScratch(w: number, h: number): [HTMLCanvasElement, CanvasRenderingCo
 /**
  * Render one stroke.
  *
- * Built up in a scratch buffer as a stack of independently deformed polygons —
- * each one a notional layer of pigment dropping out of suspension — then
+ * Built up in a scratch buffer as a stack of independently deformed polygons,
+ * each one a notional layer of pigment dropping out of suspension, then
  * composited onto the sheet in a single multiply. Doing the build-up off-sheet
  * means the wash darkens correctly where it laps over itself without the
  * intermediate stamps reacting with the paint already down.
@@ -528,7 +528,7 @@ function applySkip(
   bctx.globalCompositeOperation = 'destination-out'
   bctx.lineCap = 'butt'
 
-  // Fine channels parallel to the travel of the brush — the gaps between the
+  // Fine channels parallel to the travel of the brush, standing in for the gaps between the
   // hairs. Many thin lanes read as tooth; a few fat ones read as worms.
   const lanes = Math.max(6, Math.round(halfWidth / 1.1))
   const laneWidth = (halfWidth * 2) / lanes
@@ -577,7 +577,7 @@ function pigmentInk(
   const load = clamp01(stroke.opacity)
   const water = clamp01(stroke.water)
 
-  // Dilution lifts the masstone toward the paper rather than fading it out —
+  // Dilution lifts the masstone toward the paper rather than fading it out.
   // watercolour gets lighter by carrying less pigment, not by going transparent.
   const dilute = 0.03 + water * 0.26 * (1 - load)
   const lifted: [number, number, number] = [

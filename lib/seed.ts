@@ -24,9 +24,9 @@ interface SeedStroke {
 }
 
 const STROKES: SeedStroke[] = [
-  // — the ground, wet into wet. These run past the edges of the sheet on
-  //   purpose: a background wash with a visible boundary reads as a shape
-  //   sitting behind the flower rather than as air around it. —
+  // The ground, wet into wet. These run past the edges of the sheet on purpose:
+  // a background wash with a visible boundary reads as a shape sitting behind
+  // the flower rather than as air around it.
   { path: 'M -60 -60 C 300 -80 700 -70 1060 -60 C 1080 240 1070 500 1060 760 C 700 780 300 775 -60 760 C -80 500 -70 240 -60 -60 Z',
     layer: 'bg', pigment: 'naples-yellow', water: 0.95, opacity: 0.14, fill: true,
     author: 'agent', note: 'warm ground so the flower has air around it' },
@@ -37,7 +37,7 @@ const STROKES: SeedStroke[] = [
     layer: 'bg', pigment: 'cobalt', water: 0.95, opacity: 0.13, fill: true,
     author: 'agent', note: 'the shadow the flower casts on the ground' },
 
-  // — the flower, five petals, deliberately uneven —
+  // The flower. Five petals, deliberately uneven.
   { path: 'M 470 330 C 396 236 372 132 452 96 C 534 62 586 148 552 244 C 530 300 496 320 470 330 Z',
     layer: 'mid', pigment: 'peach', water: 0.72, opacity: 0.62, fill: true,
     author: 'agent', note: 'top petal, wettest so it bleeds into the ground' },
@@ -49,9 +49,9 @@ const STROKES: SeedStroke[] = [
     layer: 'mid', pigment: 'peach', water: 0.74, opacity: 0.58, fill: true, author: 'agent' },
   { path: 'M 456 322 C 372 268 314 172 366 118 C 420 62 490 116 490 200 C 490 258 470 300 456 322 Z',
     layer: 'mid', pigment: 'quinacridone-rose', water: 0.88, opacity: 0.34, fill: true,
-    author: 'human', note: 'pushed this one back — cooler and much wetter' },
+    author: 'human', note: 'pushed this one back, cooler and much wetter' },
 
-  // — the throat: the darkest note in the picture —
+  // The throat, which carries the darkest note in the picture.
   { path: 'M 474 344 m -58 0 a 58 48 0 1 0 116 0 a 58 48 0 1 0 -116 0 Z',
     layer: 'mid', pigment: 'alizarin-crimson', water: 0.88, opacity: 0.5, fill: true,
     author: 'agent', note: 'crimson allowed to bleed out of the throat' },
@@ -61,7 +61,7 @@ const STROKES: SeedStroke[] = [
     layer: 'top', pigment: 'sepia', water: 0.15, opacity: 1, fill: true,
     author: 'human', note: 'a real dark, so everything else reads as light' },
 
-  // — staminal column —
+  // Staminal column.
   { path: 'M 474 344 C 546 288 626 226 682 182',
     layer: 'top', pigment: 'cadmium-yellow', water: 0.22, opacity: 0.9, pressure: 0.75,
     kind: 'liner', author: 'agent', note: 'staminal column' },
@@ -71,7 +71,7 @@ const STROKES: SeedStroke[] = [
     layer: 'top', pigment: 'cadmium-red', water: 0.2, opacity: 0.9, pressure: 0.42,
     kind: 'liner', author: 'agent' },
 
-  // — stem and leaves —
+  // Stem and leaves.
   { path: 'M 506 588 C 524 640 538 682 536 700',
     layer: 'mid', pigment: 'olive-green', water: 0.4, opacity: 0.7, pressure: 0.3,
     kind: 'liner', author: 'agent' },
@@ -79,7 +79,7 @@ const STROKES: SeedStroke[] = [
     layer: 'mid', pigment: 'sap-green', water: 0.6, opacity: 0.6, fill: true, author: 'agent' },
   { path: 'M 506 640 C 424 604 328 616 288 668 C 360 708 452 696 506 640 Z',
     layer: 'mid', pigment: 'viridian', water: 0.66, opacity: 0.52, fill: true,
-    author: 'agent', note: 'viridian granulates — the mottle is the paper showing through' },
+    author: 'agent', note: 'viridian granulates, so the mottle is the paper showing through' },
   { path: 'M 540 648 C 616 626 700 630 760 652',
     layer: 'top', pigment: 'sepia', water: 0.24, opacity: 0.55, pressure: 0.34,
     kind: 'liner', author: 'human' },
@@ -87,8 +87,8 @@ const STROKES: SeedStroke[] = [
     layer: 'top', pigment: 'sepia', water: 0.24, opacity: 0.5, pressure: 0.32,
     kind: 'liner', author: 'human' },
 
-  // — one broad, very wet shadow rather than several small dark notes: small
-  //   accents at this scale read as extra petals, not as form —
+  // One broad, very wet shadow rather than several small dark notes. Small
+  // accents at this scale read as extra petals, not as form.
   { path: 'M 380 300 C 470 250 560 270 600 360 C 620 450 540 520 440 490 C 360 460 340 360 380 300 Z',
     layer: 'mid', pigment: 'quinacridone-rose', water: 0.95, opacity: 0.16, fill: true,
     author: 'human', note: 'wet shadow through the middle so the flower turns' },

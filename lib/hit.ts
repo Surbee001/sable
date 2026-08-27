@@ -15,7 +15,7 @@ function pointInPolygon(pt: Point, poly: Point[]): boolean {
   return inside
 }
 
-/** Cached sampling — hit tests run on every pointer move while dragging. */
+/** Cached sampling, because hit tests run on every pointer move while dragging. */
 const sampleCache = new Map<string, Point[][]>()
 
 function runsFor(stroke: Stroke): Point[][] {

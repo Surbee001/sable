@@ -9,7 +9,7 @@ export interface Point {
  * Deterministic randomness
  * ------------------------------------------------------------------ */
 
-/** mulberry32 — small, fast, well-distributed. Same seed, same painting. */
+/** mulberry32. Small, fast and well distributed. Same seed, same painting. */
 export function makeRng(seed: number): () => number {
   let a = seed >>> 0
   return () => {
@@ -25,8 +25,8 @@ export function makeRng(seed: number): () => number {
  * SVG path sampling
  *
  * Rather than hand-rolling a bezier flattener we lean on the browser's own
- * SVG geometry engine. That buys us the entire path grammar — cubics, arcs,
- * smooth continuations — for free, and it is exactly the notation a language
+ * SVG geometry engine. That buys us the entire path grammar for free, cubics,
+ * arcs and smooth continuations alike, and it is exactly the notation a language
  * model is most fluent in.
  * ------------------------------------------------------------------ */
 
@@ -95,7 +95,7 @@ export function samplePath(d: string, spacing = 5): Point[] {
  * `getPointAtLength` walks a multi-subpath path as one continuous parameter,
  * so a `M`/`m` jump shows up as a sudden leap between consecutive samples.
  * Detecting those leaps keeps a moveto from being welded into the outline as a
- * spurious chord — which is exactly what put a wedge through every filled disc
+ * spurious chord, which is exactly what put a wedge through every filled disc
  * the first time this ran.
  */
 export function sampleSubpaths(d: string, spacing = 5): Point[][] {
@@ -138,7 +138,7 @@ export function pointsToPath(pts: Point[]): string {
   return d
 }
 
-/** Drop samples that are closer together than `min` — keeps paths small. */
+/** Drop samples closer together than `min`, which keeps paths small. */
 export function decimate(pts: Point[], min = 3): Point[] {
   if (pts.length < 2) return pts
   const out: Point[] = [pts[0]]
@@ -219,7 +219,7 @@ export function buildOutline(
  * This single function is what makes the result read as watercolour rather than
  * vector art. Each pass inserts a midpoint on every edge and shoves it sideways
  * by an amount proportional to that edge's length, so the boundary acquires
- * detail at every scale — the same way a wet edge creeps unevenly into paper
+ * detail at every scale, the same way a wet edge creeps unevenly into paper
  * fibre. Stack a dozen independently-deformed copies at low alpha and you get
  * the layered, granular, slightly unpredictable edge of a real wash.
  */
@@ -243,8 +243,8 @@ export function deform(
       out[i * 2 + 1] = { x: a.x, y: a.y }
       continue
     }
-    // Displacement is proportional to edge length — that is what makes the
-    // boundary fractal — but an uncapped proportional wobble turns a big wash
+    // Displacement is proportional to edge length, which is what makes the
+    // boundary fractal, but an uncapped proportional wobble turns a big wash
     // into torn paper. The cap keeps the character and loses the shredding.
     let disp = (rng() - 0.5) * len * amount
     if (disp > maxDisp) disp = maxDisp
@@ -257,7 +257,7 @@ export function deform(
   return out
 }
 
-/** Push a polygon outward from its centroid — how a wet edge spreads. */
+/** Push a polygon outward from its centroid, the way a wet edge spreads. */
 export function expand(poly: Point[], scale: number): Point[] {
   if (poly.length === 0) return poly
   let cx = 0
@@ -396,7 +396,7 @@ export function serializePath(segments: PathSegment[]): string {
 
 /**
  * Which argument slots of a command are absolute positions.
- * Relative commands carry deltas, which a translation must leave alone — with
+ * Relative commands carry deltas, which a translation must leave alone, with
  * one exception: a leading `m` is measured from the origin, so it does move.
  */
 function positionSlots(cmd: string): [xSlots: number[], ySlots: number[]] {

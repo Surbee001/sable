@@ -1,5 +1,5 @@
 /**
- * A real watercolourist's palette. The properties are not decorative — each one
+ * A real watercolourist's palette. The properties are not decorative. Each one
  * feeds the renderer. Granulating pigments settle into the paper tooth, staining
  * pigments hold a hard edge, and low-density pigments stay translucent no matter
  * how many layers you put down.
@@ -10,15 +10,20 @@ export interface Pigment {
   name: string
   /** Masstone, used as the multiply colour. */
   hex: string
-  /** 0..1 — how much the pigment separates into the paper's tooth. */
+  /** 0..1. How much the pigment separates into the paper's tooth. */
   granulation: number
-  /** 0..1 — staining pigments keep crisp edges; non-staining ones bloom. */
+  /** 0..1. Staining pigments keep crisp edges; non-staining ones bloom. */
   staining: number
-  /** 0..1 — density. Low means it stays a tint even when loaded. */
+  /** 0..1. Density. Low means it stays a tint even when loaded. */
   density: number
   family: 'red' | 'yellow' | 'blue' | 'green' | 'earth' | 'neutral'
 }
 
+/**
+ * Every pigment needs a matching `.pig-<id>` class in app/globals.css, which is
+ * where its colour is actually painted. Keeping colour out of the markup is why
+ * the hex lives in both places.
+ */
 export const PIGMENTS: Pigment[] = [
   // Reds
   { id: 'quinacridone-rose', name: 'Quinacridone Rose', hex: '#c9256b', granulation: 0.05, staining: 0.85, density: 0.72, family: 'red' },

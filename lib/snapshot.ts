@@ -6,7 +6,7 @@ import { paintOrder, renderScene } from './watercolor'
 /**
  * Rendering the sheet for someone who is not looking at the screen.
  *
- * A tool call that only returns "ok, painted" leaves the agent working blind —
+ * A tool call that only returns "ok, painted" leaves the agent working blind.
  * it has to imagine the consequence of its own brushwork. Handing back an
  * actual image closes the loop, and it is the difference between an agent that
  * fires off strokes and one that can look, judge, and correct.
