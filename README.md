@@ -65,6 +65,11 @@ way a wash actually forms:
   cauliflower, done by lifting paint back out of the stroke buffer.
 - **Dry brush.** Fine channels parallel to the brush's travel, so a starved brush
   skips across the tooth instead of flooding it.
+- **Wetting in.** A mark does not arrive finished. It goes on pale and tight,
+  creeps outward into the fibre, deepens, and only pulls its dark rim once it
+  begins to dry. You watch every stroke do this, whoever made it.
+- **Pigment separation.** Each layer of pigment lands slightly warmer or cooler
+  than the last, so a wash is never exactly one hue.
 
 Paper is not decorative either. Tooth depth changes how strongly granulating
 pigments mottle, and painting onto a wet layer makes the mark bleed.
@@ -101,7 +106,9 @@ not quite specify. `paint`, `revise_stroke`, `transform_strokes`,
 the agent can look at what it did, judge it, and correct it. That loop is the
 difference between an agent that fires off strokes and one that paints.
 
-**2. The toolbox is a live description of what is possible.** The set of
+**2. The toolbox is a live description of what is possible.** Watch the Agent
+tab while the agent works: a tool lights up while it is being called, and leaves
+a fading trail of what was used just before. The set of
 registered tools is not a fixed manifest. It is rebuilt, firing `toolchange`,
 whenever the *shape* of what the studio can do changes:
 
@@ -134,6 +141,37 @@ means:
   the agent's own note on why.
 - An agent cannot reach a state the UI could not have produced.
 
+## The duet
+
+A blank sheet never forces a person and an agent to depend on each other. A
+score does.
+
+**Evening river** is a landscape in the old manner, painted in twelve passes
+that alternate. The agent lays the sun and the far hills; you trace the nearer
+ridge. It floods the river; you break it with ripples. It lays the bank; you
+grow grass out of it, draw the pine, and put the branches where you want them.
+Then it hangs the foliage off the branches you actually made, which is not
+where the score imagined they would be, so its brief tells it to go and look
+first.
+
+The guide shows where a mark goes. It does not make the mark: what lands on the
+paper is your line, with your hand in it. Your brush is loaded for you at the
+start of each pass, so a pass is about placement rather than about hunting for
+the right pigment.
+
+While a score is running, two more tools exist:
+
+| Tool | What it does |
+| --- | --- |
+| `duet_status` | The whole score, which pass is current, whose turn, and the brief for it |
+| `duet_complete_turn` | Hands the brush back. Registered only when it is actually the agent's turn |
+
+`duet_complete_turn`'s description **is** the brief for the current pass, so the
+agent's instructions change every time the turn comes back to it. The passes are
+described rather than dictated: the agent paints with the ordinary `paint` tool
+and then hands back. A button in the panel paints a reference version of its
+turn, so the score can still be seen through when nothing is connected.
+
 ## Try it
 
 Open the live URL and the sheet already has a study on it, painted partly by an
@@ -144,6 +182,8 @@ agent and partly by hand, as the log shows.
   painted are no more fixed than your own.
 - Watch the **Agent** tab as you select and deselect.
 - Press **Tab** to hide the panels and leave only the paper.
+- Open the **Duet** tab and start *Evening river* to paint one landscape in
+  turns.
 - Then ask the agent something like:
   - *"Look at the canvas. What would you add?"*
   - *"The top petal is too cold. Warm it and make it bleed more."*
@@ -179,6 +219,8 @@ lib/
   snapshot.ts       offscreen rendering, so tools can return images
   hit.ts            click testing
   seed.ts           the study on the sheet when you arrive
+  duet.ts           the score for a painting made in turns
+  presence.ts       cursors, and when a mark appears rather than when it exists
   theme.ts          light and dark
 components/         the studio UI
 app/globals.css     the whole design system, including every swatch colour

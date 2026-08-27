@@ -14,9 +14,9 @@
   /* Studio surface. Warm grey, so the paper reads as the brightest thing. */
   --bg: #e9e7e3;
   --bg-deep: #ded9d2;
-  --card: #fdfcfa;
-  --card-sunk: #f0eeea;
-  --card-raised: #ffffff;
+  --card: transparent;
+  --card-sunk: rgba(0, 0, 0, 0.055);
+  --card-raised: rgba(255, 255, 255, 0.92);
 
   --text: #282828;
   --text-soft: #5d5952;
@@ -60,9 +60,9 @@
 :root[data-theme='dark'] {
   --bg: #1a1917;
   --bg-deep: #121110;
-  --card: #232220;
-  --card-sunk: #1c1b19;
-  --card-raised: #2a2825;
+  --card: transparent;
+  --card-sunk: rgba(255, 255, 255, 0.055);
+  --card-raised: rgba(255, 255, 255, 0.1);
 
   --text: #ece8e1;
   --text-soft: #b6b0a6;
@@ -97,9 +97,9 @@
   :root:not([data-theme='light']) {
     --bg: #1a1917;
     --bg-deep: #121110;
-    --card: #232220;
-    --card-sunk: #1c1b19;
-    --card-raised: #2a2825;
+    --card: transparent;
+    --card-sunk: rgba(255, 255, 255, 0.055);
+    --card-raised: rgba(255, 255, 255, 0.1);
 
     --text: #ece8e1;
     --text-soft: #b6b0a6;
@@ -163,54 +163,76 @@ body {
   width: 100%;
   height: 100dvh;
   overflow: hidden;
-  background:
-    radial-gradient(120% 100% at 50% 0%, var(--bg) 0%, var(--bg-deep) 100%);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-columns: 216px minmax(0, 1fr) 258px;
+  grid-template-areas:
+    'top top top'
+    'left stage right';
+  background: radial-gradient(120% 100% at 50% 0%, var(--bg) 0%, var(--bg-deep) 100%);
+  transition: grid-template-columns 0.36s var(--ease);
 }
 
-/* The sheet sits in the middle and everything else floats over it. */
+/* Focus mode: the columns close up and the paper takes the desk. */
+.studio--bare {
+  grid-template-columns: 0 minmax(0, 1fr) 0;
+}
+
+.bar {
+  grid-area: top;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 26px 8px;
+  min-width: 0;
+}
+
+.rail {
+  min-width: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px 0 22px;
+  transition: opacity 0.24s var(--ease);
+}
+
+.rail--left {
+  grid-area: left;
+  padding-left: 26px;
+  padding-right: 16px;
+}
+
+.rail--right {
+  grid-area: right;
+  padding-left: 16px;
+  padding-right: 26px;
+}
+
+.studio--bare .rail,
+.studio--bare .bar {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .stage {
-  position: absolute;
-  inset: 0;
+  grid-area: stage;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 84px 20px 20px;
+  min-width: 0;
+  padding: 4px 12px 26px;
 }
 
 .stage-inner {
   width: 100%;
-  /* The third term is the width at which a 10:7 sheet exactly fills the
-     available height, so the paper is bounded by whichever runs out first. */
-  max-width: min(1180px, calc(100vw - 440px), calc((100dvh - 128px) * 10 / 7));
-  transition: max-width 0.4s var(--ease);
-}
-
-.stage-inner--wide {
-  max-width: min(1400px, calc(100vw - 80px), calc((100dvh - 128px) * 10 / 7));
-}
-
-@media (max-width: 1120px) {
-  .stage-inner,
-  .stage-inner--wide {
-    max-width: min(calc(100vw - 32px), calc((100dvh - 190px) * 10 / 7));
-  }
-  .stage {
-    padding: 72px 16px 104px;
-  }
-  .float-top {
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-  .spacer {
-    display: none;
-  }
+  /* Bounded by whichever runs out first, the column or the height. */
+  max-width: min(1180px, calc((100dvh - 150px) * 10 / 7));
 }
 
 .sheet-frame {
   position: relative;
   width: 100%;
   aspect-ratio: 1000 / 700;
-  border-radius: 6px;
+  border-radius: 5px;
   overflow: hidden;
   box-shadow: var(--lift-sheet);
 }
@@ -224,89 +246,76 @@ body {
 
 .sheet-layer--interactive {
   touch-action: none;
+  cursor: none;
 }
 
-.cursor-paint {
-  cursor: crosshair;
+.grow {
+  flex: 1;
+  min-width: 0;
 }
 
-.cursor-pick {
-  cursor: default;
+.spacer {
+  flex: 1;
+  min-width: 0;
 }
 
-/* ----------------------------------------------------------- floating ui */
-
-.float {
-  position: absolute;
-  z-index: 20;
-}
-
-.float-top {
-  top: 16px;
-  left: 16px;
-  right: 16px;
+.pill {
   display: flex;
   align-items: center;
+  gap: 3px;
+}
+
+.pill--text {
   gap: 10px;
-  pointer-events: none;
 }
 
-.float-top > * {
-  pointer-events: auto;
+.pill--title {
+  min-width: 0;
+  max-width: 34vw;
+  justify-content: center;
 }
 
-.float-left {
-  top: 50%;
-  left: 16px;
-  transform: translateY(-50%);
-  width: 196px;
-  max-height: calc(100dvh - 140px);
+/* Narrow: one column, with everything else in a strip along the bottom. */
+@media (max-width: 1120px) {
+  .studio,
+  .studio--bare {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'top'
+      'stage';
+  }
+
+  .rail {
+    display: none;
+  }
+
+  .bar {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 14px 16px 6px;
+  }
+
+  .spacer,
+  .pill--title,
+  .tagline {
+    display: none;
+  }
+
+  .stage {
+    padding: 6px 16px 96px;
+  }
+
+  .stage-inner {
+    max-width: min(100%, calc((100dvh - 200px) * 10 / 7));
+  }
 }
 
-.float-right {
-  top: 50%;
-  right: 16px;
-  transform: translateY(-50%);
-  width: 244px;
-  max-height: calc(100dvh - 120px);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  overflow-y: auto;
-  padding: 2px;
-  margin: -2px;
-}
-
-.float-right > .card {
-  flex-shrink: 0;
-  overflow: visible;
-}
-
-.float--hidden {
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(-50%) scale(0.97);
-}
-
-.float-top.float--hidden {
-  transform: translateY(-8px);
-}
-
-.float,
-.float-left,
-.float-right {
-  transition:
-    opacity 0.28s var(--ease),
-    transform 0.34s var(--ease);
-}
-
-/* Narrow layout. One dock along the bottom holding everything, collapsed to
-   its tab bar until a tab is chosen, so the paper keeps the screen. */
+/* The bottom strip on a narrow screen. */
 .dock {
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: 12px;
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: 14px;
   z-index: 20;
   display: flex;
   flex-direction: column;
@@ -317,6 +326,8 @@ body {
 }
 
 .dock.float--hidden {
+  opacity: 0;
+  pointer-events: none;
   transform: translateY(16px);
 }
 
@@ -324,14 +335,19 @@ body {
   max-height: 44dvh;
   overflow-y: auto;
   overscroll-behavior: contain;
+  padding: 12px 14px;
+  border-radius: var(--radius-card);
+  background: var(--bg);
+  box-shadow: var(--lift);
 }
 
 .dock-bar {
   padding: 5px;
+  border-radius: var(--radius-pill);
+  background: var(--bg);
+  box-shadow: var(--lift);
 }
 
-/* The dock's tab strip is the card, so it should not draw a second surface
-   inside one. */
 .dock-tabs {
   margin: 0;
   padding: 0;
@@ -348,10 +364,8 @@ body {
 /* --------------------------------------------------------------- surface */
 
 .card {
-  background: var(--card);
-  border-radius: var(--radius-card);
-  box-shadow: var(--lift);
-  padding: 14px;
+  background: none;
+  padding: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -364,16 +378,11 @@ body {
 .pill {
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 5px;
-  background: var(--card);
-  border-radius: var(--radius-pill);
-  box-shadow: var(--lift);
+  gap: 3px;
 }
 
 .pill--text {
-  padding: 7px 14px;
-  gap: 9px;
+  gap: 10px;
 }
 
 .grow {
@@ -571,14 +580,13 @@ body {
 
 .btn--solid {
   background: var(--text);
-  color: var(--card);
-  box-shadow: var(--lift-low);
+  color: var(--bg);
 }
 
 .btn--solid:hover:not(:disabled) {
   background: var(--text);
-  color: var(--card);
-  filter: brightness(1.15);
+  color: var(--bg);
+  filter: brightness(1.18);
 }
 
 .btn--icon {
@@ -639,7 +647,14 @@ body {
 .seg-item--on {
   background: var(--card-raised);
   color: var(--text);
-  box-shadow: var(--lift-low);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.1),
+    inset 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+}
+
+:root[data-theme='dark'] .seg-item--on,
+:root:not([data-theme='light']) .seg-item--on {
+  box-shadow: none;
 }
 
 /* ------------------------------------------------------------------ rows */
@@ -708,7 +723,7 @@ body {
 .swatch--on {
   box-shadow:
     inset 0 0 0 0.5px rgba(0, 0, 0, 0.22),
-    0 0 0 2px var(--card),
+    0 0 0 2px var(--bg),
     0 0 0 3.5px var(--text);
 }
 
@@ -800,7 +815,7 @@ body {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: var(--card-raised);
+  background: var(--bg);
   box-shadow:
     0 1px 3px rgba(0, 0, 0, 0.28),
     inset 0 0 0 0.5px rgba(0, 0, 0, 0.24);
@@ -812,7 +827,7 @@ body {
   height: 13px;
   border: 0;
   border-radius: 50%;
-  background: var(--card-raised);
+  background: var(--bg);
   box-shadow:
     0 1px 3px rgba(0, 0, 0, 0.28),
     inset 0 0 0 0.5px rgba(0, 0, 0, 0.24);
@@ -1069,7 +1084,6 @@ body {
 .tab--on {
   background: var(--card-raised);
   color: var(--text);
-  box-shadow: var(--lift-low);
 }
 
 /* ------------------------------------------------------------------- log */
@@ -1156,7 +1170,7 @@ body {
   max-height: calc(100dvh - 48px);
   overflow-y: auto;
   padding: 30px 30px 24px;
-  background: var(--card);
+  background: var(--bg);
   border-radius: 24px;
   box-shadow: var(--lift);
   animation: welcome-in 0.5s var(--ease);
@@ -1217,7 +1231,6 @@ body {
   justify-content: center;
   border-radius: 50%;
   background: var(--card-sunk);
-  box-shadow: var(--lift-low);
   font-size: 9.5px;
   font-weight: 600;
   color: var(--text-dim);
@@ -1335,4 +1348,105 @@ body {
 
 .eye--off {
   color: var(--text-faint);
+}
+
+/* ------------------------------------------------------------------ duet */
+
+.note--lead {
+  margin-top: 0;
+  margin-bottom: 12px;
+  font-size: 11.5px;
+  color: var(--text-soft);
+}
+
+.duet-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.duet-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--text);
+}
+
+.turn {
+  padding: 12px;
+  margin-bottom: 16px;
+  border-radius: 12px;
+  background: var(--card-sunk);
+}
+
+.turn--agent {
+  box-shadow: inset 0 0 0 1px var(--agent-soft);
+}
+
+.turn-who {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.turn--agent .turn-who {
+  color: var(--agent);
+}
+
+.turn--human .turn-who {
+  color: var(--accent);
+}
+
+.turn-title {
+  display: block;
+  margin: 4px 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.turn-hint {
+  margin: 0 0 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-soft);
+}
+
+.score {
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.score-step {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 4px;
+  font-size: 11px;
+  color: var(--text-faint);
+  border-radius: 6px;
+}
+
+.score-step--done {
+  color: var(--text-dim);
+}
+
+.score-step--now {
+  color: var(--text);
+  background: var(--card-sunk);
+}
+
+.score-name {
+  flex: 1;
+  min-width: 0;
 }

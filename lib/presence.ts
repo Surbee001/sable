@@ -33,6 +33,22 @@ function durationFor(length: number): number {
   return Math.max(240, Math.min(900, 180 + length * 1.5))
 }
 
+/**
+ * How long a mark takes to sink into the paper.
+ *
+ * Paint does not arrive finished. It goes on pale and tight, creeps outward
+ * into the fibre, deepens as the water carries pigment down, and only pulls a
+ * dark rim once it starts to dry. Wetter paint takes longer to do all of it.
+ */
+function settleFor(water: number): number {
+  return 620 + water * 900
+}
+
+/** Slow at the end, the way a drying edge does. */
+function ease(t: number): number {
+  return 1 - Math.pow(1 - t, 2.2)
+}
+
 class Presence {
   private cursors: Record<Who, Cursor> = { human: { ...IDLE }, agent: { ...IDLE } }
   /**
@@ -43,6 +59,9 @@ class Presence {
    */
   private pending = new Set<string>()
   private queue: Array<{ id: string; points: Point[] }> = []
+  /** Marks on the paper but still wetting in, against when they landed. */
+  private settling = new Map<string, { at: number; duration: number }>()
+  private settleFrame = 0
   private running = false
   private listeners = new Set<() => void>()
   private failsafe: ReturnType<typeof setTimeout> | null = null
@@ -85,8 +104,63 @@ class Presence {
     return !this.pending.has(id)
   }
 
+  /** True once the mark has finished wetting in and belongs on the sheet. */
+  isSettled(id: string): boolean {
+    return !this.pending.has(id) && !this.settling.has(id)
+  }
+
+  get settlingIds(): string[] {
+    return [...this.settling.keys()]
+  }
+
+  /** 0 the instant it lands, 1 when it has dried. */
+  settleProgress(id: string): number {
+    const entry = this.settling.get(id)
+    if (!entry) return 1
+    return ease(Math.min(1, (performance.now() - entry.at) / entry.duration))
+  }
+
+  /** Start a mark wetting into the paper. */
+  beginSettle(ids: Array<{ id: string; water: number }>): void {
+    const now = performance.now()
+    for (const { id, water } of ids) {
+      this.settling.set(id, { at: now, duration: settleFor(water) })
+    }
+    if (ids.length > 0) this.runSettle()
+  }
+
+  /**
+   * Retire marks as they finish drying.
+   *
+   * Only emits when the set actually changes. The frame-by-frame redraw of a
+   * drying wash is driven by the view's own animation loop; waking React sixty
+   * times a second to say the same thing would cost far more than the painting.
+   */
+  private runSettle(): void {
+    this.emit()
+    if (this.settleFrame) return
+    const step = () => {
+      this.settleFrame = 0
+      const now = performance.now()
+      let changed = false
+      for (const [id, entry] of this.settling) {
+        if (now - entry.at >= entry.duration) {
+          this.settling.delete(id)
+          changed = true
+        }
+      }
+      if (changed) this.emit()
+      if (this.settling.size > 0) this.settleFrame = requestAnimationFrame(step)
+    }
+    this.settleFrame = requestAnimationFrame(step)
+  }
+
   /** Queue the agent's marks so they arrive one at a time, under a cursor. */
   announce(strokes: Stroke[]): void {
+    this.water = new Map([
+      ...this.water,
+      ...strokes.map((s) => [s.id, s.water] as const),
+    ])
     if (strokes.length === 0) return
 
     for (const stroke of strokes) {
@@ -106,7 +180,14 @@ class Presence {
   }
 
   /** Show everything immediately and stop animating. */
+  private water = new Map<string, number>()
+
   flush(): void {
+    const now = performance.now()
+    for (const id of this.pending) {
+      this.settling.set(id, { at: now, duration: settleFor(this.water.get(id) ?? 0.5) })
+    }
+    if (this.pending.size > 0) this.runSettle()
     this.pending.clear()
     this.queue = []
     this.running = false
@@ -138,6 +219,7 @@ class Presence {
 
       if (t >= 1) {
         this.pending.delete(item.id)
+        this.beginSettle([{ id: item.id, water: this.water.get(item.id) ?? 0.5 }])
         item = this.queue.shift()
         if (!item) {
           this.running = false

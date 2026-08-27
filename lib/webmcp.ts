@@ -816,6 +816,97 @@ function contextualTools(): ToolDef[] {
     })
   }
 
+  /* ---------------- the duet ---------------- */
+
+  const duet = studio.getDuet()
+  if (duet) {
+    const step = duet.score.steps[duet.index] ?? null
+    const finished = duet.index >= duet.score.steps.length
+
+    tools.push({
+      name: 'duet_status',
+      description:
+        `"${duet.score.title}" is being painted in turns, ${duet.score.steps.length} passes ` +
+        'alternating between the human and you. This returns the whole score, which pass is ' +
+        'current, whose turn it is, and the brief for that pass, with an image of the sheet. ' +
+        'Call it before you paint anything: your passes are built on marks the human just made, ' +
+        `and where they actually put them is not where the score imagined they would.`,
+      annotations: { readOnlyHint: true },
+      inputSchema: { type: 'object', properties: {} },
+      execute: () => {
+        const scene = studio.getScene()
+        const lines = finished
+          ? [`"${duet.score.title}" is finished. All ${duet.score.steps.length} passes are done.`]
+          : [
+              `"${duet.score.title}", pass ${duet.index + 1} of ${duet.score.steps.length}.`,
+              step?.by === 'agent'
+                ? `It is your turn: ${step.title}.`
+                : `It is the human's turn: ${step?.title}. Wait for them.`,
+              step ? step.hint : '',
+            ]
+        return show(lines.filter(Boolean).join('\n\n'), snapshotScene(scene, { width: 760 }), {
+          title: duet.score.title,
+          pass: duet.index + 1,
+          of: duet.score.steps.length,
+          turn: finished ? 'done' : step?.by,
+          current: step
+            ? {
+                id: step.id,
+                title: step.title,
+                brief: step.hint,
+                by: step.by,
+                // Where the human is being asked to draw, so you can see what
+                // is about to appear and where your own pass will have to sit.
+                guides: step.guides ?? undefined,
+                traced: step.by === 'human' ? duet.traced : undefined,
+              }
+            : null,
+          score: duet.score.steps.map((st, i) => ({
+            title: st.title,
+            by: st.by,
+            state: i < duet.index ? 'done' : i === duet.index ? 'current' : 'waiting',
+          })),
+        })
+      },
+    })
+
+    if (step && step.by === 'agent') {
+      tools.push({
+        name: 'duet_complete_turn',
+        description:
+          `Hand the brush back. Your current pass is "${step.title}". ${step.hint}\n\n` +
+          'Paint it with the ordinary paint tool first, looking at the sheet before and after, ' +
+          'then call this to end your turn and pass to the human. Do not call it before you ' +
+          'have actually painted anything.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            note: {
+              type: 'string',
+              description: 'One line for the human on what you did and why.',
+            },
+          },
+        },
+        execute: (input: { note?: string }) => {
+          const finishedStep = step
+          const next = studio.advanceDuet()
+          if (typeof input?.note === 'string' && input.note.trim()) {
+            studio.noteFromAgent(input.note.trim())
+          }
+          return show(
+            `Done with "${finishedStep.title}". ` +
+              (next
+                ? next.by === 'human'
+                  ? `Over to the human for "${next.title}".`
+                  : `Your turn again: ${next.title}.`
+                : 'That was the last pass. The painting is finished.'),
+            snapshotScene(studio.getScene(), { width: 760 }),
+          )
+        },
+      })
+    }
+  }
+
   const brief = studio.getBrief().trim()
   if (brief) {
     tools.push({
@@ -909,6 +1000,8 @@ function surfaceKey(): string {
     // The brief is quoted inside read_brief's description, so changing it
     // genuinely changes the surface and has to re-register.
     studio.getBrief().trim(),
+    // Each pass of a duet carries its own brief inside the tool description.
+    studio.getDuet() ? `duet:${studio.getDuet()?.index}` : '-',
   ].join('|')
 }
 

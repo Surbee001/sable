@@ -17,6 +17,7 @@ import { useMediaQuery } from '@/lib/useMediaQuery'
 import { useStudio } from '@/lib/useStudio'
 import { Activity } from './Activity'
 import { AgentPanel } from './AgentPanel'
+import { Duet } from './Duet'
 import { Inspector } from './Inspector'
 import { Layers } from './Layers'
 import { Sheet } from './Sheet'
@@ -24,7 +25,7 @@ import { Toolbox } from './Toolbox'
 import { Welcome } from './Welcome'
 import { Button } from './ui'
 
-type Tab = 'mark' | 'tools' | 'agent' | 'layers' | 'log'
+type Tab = 'mark' | 'duet' | 'tools' | 'agent' | 'layers' | 'log'
 
 export function Studio() {
   const { scene, ui, canUndo, canRedo } = useStudio()
@@ -77,6 +78,7 @@ export function Studio() {
 
   const panel = (id: Tab) => {
     if (id === 'mark') return hasSelection ? <Inspector /> : null
+    if (id === 'duet') return <Duet />
     if (id === 'tools') return <Toolbox />
     if (id === 'agent') return <AgentPanel />
     if (id === 'layers') return <Layers />
@@ -88,6 +90,7 @@ export function Studio() {
 
   const LABEL: Record<Tab, string> = {
     mark: 'Mark',
+    duet: 'Duet',
     tools: 'Tools',
     agent: 'Agent',
     layers: 'Layers',
@@ -95,18 +98,12 @@ export function Studio() {
   }
 
   if (narrow) {
-    const ids = tabsFor(['mark', 'tools', 'agent', 'layers', 'log'] as const)
+    const ids = tabsFor(['mark', 'duet', 'tools', 'agent', 'layers', 'log'] as const)
     return (
-      <div className="studio">
+      <div className={`studio${chromeHidden ? ' studio--bare' : ''}`}>
         <Welcome />
 
-        <div className="stage">
-          <div className="stage-inner">
-            <Sheet />
-          </div>
-        </div>
-
-        <header className={`float float-top${hide}`}>
+        <header className="bar">
           <div className="pill pill--text">
             <span className="wordmark">Sable</span>
             <span className="tagline">you and the agent both hold the brush</span>
@@ -130,9 +127,15 @@ export function Studio() {
           </div>
         </header>
 
+        <div className="stage">
+          <div className="stage-inner">
+            <Sheet />
+          </div>
+        </div>
+
         <div className={`dock${hide}`}>
-          {openTab ? <div className="card dock-body">{panel(openTab)}</div> : null}
-          <div className="card card--flush dock-bar">
+          {openTab ? <div className="dock-body">{panel(openTab)}</div> : null}
+          <div className="dock-bar">
             <div className="tabs dock-tabs">
               {ids.map((id) => (
                 <button
@@ -152,16 +155,10 @@ export function Studio() {
   }
 
   return (
-    <div className="studio">
+    <div className={`studio${chromeHidden ? ' studio--bare' : ''}`}>
       <Welcome />
 
-      <div className="stage">
-        <div className={`stage-inner${chromeHidden ? ' stage-inner--wide' : ''}`}>
-          <Sheet />
-        </div>
-      </div>
-
-      <header className={`float float-top${hide}`}>
+      <header className="bar">
         <div className="pill pill--text">
           <span className="wordmark">Sable</span>
           <span className="tagline">you and the agent both hold the brush</span>
@@ -223,7 +220,7 @@ export function Studio() {
             ariaLabel="Switch between light and dark"
             title="Switch between light and dark"
           >
-            {theme === 'dark' ? '☀' : '☽'}
+            {theme === 'dark' ? <Sun size={14} weight="bold" /> : <Moon size={14} weight="bold" />}
           </Button>
           <Button solid onClick={download} disabled={scene.strokes.length === 0}>
             Export
@@ -231,11 +228,17 @@ export function Studio() {
         </div>
       </header>
 
-      <aside className={`float float-left card${hide}`}>
+      <div className="stage">
+        <div className="stage-inner">
+          <Sheet />
+        </div>
+      </div>
+
+      <aside className="rail rail--left">
         <Toolbox />
       </aside>
 
-      <aside className={`float float-right${hide}`}>
+      <aside className="rail rail--right">
         <div className="card">
           <div className="tabs">
             {hasSelection ? (
@@ -247,18 +250,19 @@ export function Studio() {
                 Mark
               </button>
             ) : null}
-            {(['agent', 'layers', 'log'] as const).map((id) => (
+            {(['duet', 'agent', 'layers', 'log'] as const).map((id) => (
               <button
                 key={id}
                 type="button"
                 className={`tab${tab === id ? ' tab--on' : ''}`}
                 onClick={() => setTab(id)}
               >
-                {id === 'agent' ? 'Agent' : id === 'layers' ? 'Layers' : 'Log'}
+                {LABEL[id]}
               </button>
             ))}
           </div>
           {tab === 'mark' && hasSelection ? <Inspector /> : null}
+          {tab === 'duet' ? <Duet /> : null}
           {tab === 'agent' ? <AgentPanel /> : null}
           {tab === 'layers' ? <Layers /> : null}
           {tab === 'log' ? <Activity /> : null}

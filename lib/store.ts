@@ -1,4 +1,5 @@
 import { translatePath } from './geometry'
+import { KAWA, type DuetScore, type DuetStep } from './duet'
 import { presence } from './presence'
 import { seedScene } from './seed'
 import {
@@ -67,11 +68,21 @@ export interface UiState {
  * Store
  * ------------------------------------------------------------------ */
 
+/** Where a duet has got to. */
+export interface DuetState {
+  score: DuetScore
+  /** Which pass is being painted. Equal to steps.length when it is finished. */
+  index: number
+  /** How many of the current pass's guides the human has traced. */
+  traced: number
+}
+
 export interface StudioSnapshot {
   scene: Scene
   ui: UiState
   activity: Activity[]
   brief: string
+  duet: DuetState | null
   canUndo: boolean
   canRedo: boolean
 }
@@ -146,6 +157,7 @@ class Studio {
   }
   private activity: Activity[] = []
   private brief = ''
+  private duet: DuetState | null = null
   private past: Scene[] = []
   private future: Scene[] = []
   private listeners = new Set<() => void>()
@@ -166,6 +178,7 @@ class Studio {
       ui: this.ui,
       activity: this.activity,
       brief: this.brief,
+      duet: this.duet,
       canUndo: this.past.length > 0,
       canRedo: this.future.length > 0,
     }
@@ -249,6 +262,7 @@ class Studio {
     this.checkpoint()
     this.scene = { ...this.scene, strokes: [...this.scene.strokes, stroke] }
     if (author === 'agent') presence.announce([stroke])
+    else presence.beginSettle([{ id: stroke.id, water: stroke.water }])
     this.log(
       author,
       'paint',
@@ -256,6 +270,7 @@ class Studio {
       [stroke.id],
       input.note,
     )
+    if (author === 'human') this.tallyDuet()
     this.emit()
     return stroke
   }
@@ -292,6 +307,7 @@ class Studio {
 
     this.scene = { ...this.scene, strokes: [...this.scene.strokes, ...made] }
     if (author === 'agent') presence.announce(made)
+    else presence.beginSettle(made.map((m) => ({ id: m.id, water: m.water })))
     this.log(
       author,
       'paint',
@@ -545,6 +561,95 @@ class Studio {
 
   setMode(mode: Mode): void {
     this.ui = { ...this.ui, mode, selection: mode === 'paint' ? [] : this.ui.selection }
+    this.emit()
+  }
+
+  /* -------------------- the duet -------------------- */
+
+  getDuet = (): DuetState | null => this.duet
+
+  currentStep(): DuetStep | null {
+    if (!this.duet) return null
+    return this.duet.score.steps[this.duet.index] ?? null
+  }
+
+  startDuet(score: DuetScore = KAWA): void {
+    this.checkpoint()
+    this.scene = {
+      title: score.title,
+      paper: score.paper,
+      layers: [
+        { id: 'bg', name: 'Ground', visible: true, wetness: 0.7, opacity: 1 },
+        { id: 'mid', name: 'Body', visible: true, wetness: 0.3, opacity: 1 },
+        { id: 'top', name: 'Detail', visible: true, wetness: 0, opacity: 1 },
+      ],
+      strokes: [],
+    }
+    this.ui = { ...this.ui, selection: [], mode: 'paint' }
+    this.duet = { score, index: 0, traced: 0 }
+    this.log('human', 'note', `Started ${score.title}`)
+    this.applyLoadout()
+    this.emit()
+  }
+
+  endDuet(): void {
+    if (!this.duet) return
+    this.duet = null
+    this.emit()
+  }
+
+  /** Finish the current pass and move to the next. */
+  advanceDuet(): DuetStep | null {
+    if (!this.duet) return null
+    const next = Math.min(this.duet.index + 1, this.duet.score.steps.length)
+    this.duet = { ...this.duet, index: next, traced: 0 }
+    this.applyLoadout()
+    this.emit()
+    return this.currentStep()
+  }
+
+  /** Load the human's brush for the pass they are about to paint. */
+  private applyLoadout(): void {
+    const step = this.currentStep()
+    if (!step || step.by !== 'human' || !step.loadout) return
+    const { layer, ...brush } = step.loadout
+    const target = this.resolveLayer(layer)
+    this.ui = {
+      ...this.ui,
+      brush: { ...this.ui.brush, ...brush },
+      activeLayerId: target?.id ?? this.ui.activeLayerId,
+    }
+  }
+
+  /**
+   * One traced guide per stroke. The mark itself is whatever the human actually
+   * drew, not the guide: this is their hand in the painting, not a stencil.
+   */
+  private tallyDuet(): void {
+    const step = this.currentStep()
+    if (!this.duet || !step || step.by !== 'human') return
+    const needed = step.guides?.length ?? 1
+    const traced = this.duet.traced + 1
+    if (traced >= needed) {
+      this.duet = { ...this.duet, index: this.duet.index + 1, traced: 0 }
+      this.applyLoadout()
+    } else {
+      this.duet = { ...this.duet, traced }
+    }
+  }
+
+  /** Paint the reference version of an agent pass, when nobody is connected. */
+  playAgentStep(): DuetStep | null {
+    const step = this.currentStep()
+    if (!step || step.by !== 'agent' || !step.reference) return null
+    this.paintMany(step.reference, 'agent', step.title.toLowerCase())
+    this.advanceDuet()
+    return step
+  }
+
+  /** A line from the agent addressed to the human, with no mark attached. */
+  noteFromAgent(note: string): void {
+    this.log('agent', 'note', note)
     this.emit()
   }
 

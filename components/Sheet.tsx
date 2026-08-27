@@ -1,9 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { decimate, pointsToPath, type Point } from '@/lib/geometry'
+import { decimate, pointsToPath, sampleSubpaths, type Point } from '@/lib/geometry'
 import { hitTest, selectionOutline } from '@/lib/hit'
-import { presence, type Who } from '@/lib/presence'
+import { presence } from '@/lib/presence'
 import { studio } from '@/lib/store'
 import { useStudio } from '@/lib/useStudio'
 import { BRUSHES, CANVAS_H, CANVAS_W, PAPERS, type Stroke } from '@/lib/types'
@@ -15,10 +15,19 @@ const CLICK_SLOP = 3
 const FLASH_MS = 2600
 
 /**
- * Overlay colours come from the stylesheet rather than being written here, so
- * selection, cursors and agent marks follow the theme like everything else.
- * A canvas cannot take a class, so the tokens are read back off the document.
+ * The sheet is four stacked canvases, because the four things drawn on it
+ * change at completely different rates:
+ *
+ *   main    marks that have dried. Appended to, almost never redrawn.
+ *   fx      marks still wetting in, and the mark being drawn right now.
+ *           Repainted every frame while either is true.
+ *   ui      selection, guides, the brush footprint. Repainted on state changes.
+ *   cursor  the two hands. Repainted the instant either moves.
+ *
+ * Keeping them apart is what lets the cursor track the mouse with no delay:
+ * it never waits on a React render, and it never waits on a wash being redrawn.
  */
+
 function themeInk(): { accent: string; agent: string; guide: string } {
   const s = getComputedStyle(document.documentElement)
   return {
@@ -29,20 +38,24 @@ function themeInk(): { accent: string; agent: string; guide: string } {
 }
 
 export function Sheet() {
-  const { scene, ui } = useStudio()
+  const { scene, ui, duet } = useStudio()
   const wrapRef = useRef<HTMLDivElement>(null)
   const mainRef = useRef<HTMLCanvasElement>(null)
-  const overlayRef = useRef<HTMLCanvasElement>(null)
+  const fxRef = useRef<HTMLCanvasElement>(null)
+  const uiRef = useRef<HTMLCanvasElement>(null)
+  const cursorRef = useRef<HTMLCanvasElement>(null)
 
   const [size, setSize] = useState({ w: 0, h: 0 })
 
-  /** What the main canvas currently shows, so we can append instead of redraw. */
   const paintedRef = useRef<Stroke[] | null>(null)
   const drawingRef = useRef<{ points: Point[] } | null>(null)
   const dragRef = useRef<{ last: Point; moved: number; ids: string[] } | null>(null)
   const flashRef = useRef<{ ids: string[]; at: number } | null>(null)
-  const frameRef = useRef(0)
+  const fxFrameRef = useRef(0)
+  const sceneRef = useRef(scene)
   const [, tick] = useState(0)
+
+  sceneRef.current = scene
 
   /* ---------------- sizing ---------------- */
 
@@ -62,33 +75,31 @@ export function Sheet() {
     return () => observer.disconnect()
   }, [])
 
-  /* ---------------- presence drives repaints ---------------- */
+  const fit = useCallback(
+    (canvas: HTMLCanvasElement | null): CanvasRenderingContext2D | null => {
+      if (!canvas || size.w === 0) return null
+      if (canvas.width !== size.w || canvas.height !== size.h) {
+        canvas.width = size.w
+        canvas.height = size.h
+      }
+      return canvas.getContext('2d')
+    },
+    [size],
+  )
 
-  useEffect(() => presence.subscribe(() => tick((n) => n + 1)), [])
-
-  /* ---------------- main render ---------------- */
+  /* ---------------- main: what has dried ---------------- */
 
   useEffect(() => {
     const canvas = mainRef.current
     if (!canvas || size.w === 0) return
-    if (canvas.width !== size.w || canvas.height !== size.h) {
-      canvas.width = size.w
-      canvas.height = size.h
-      paintedRef.current = null
-    }
-    const ctx = canvas.getContext('2d')
+    const resized = canvas.width !== size.w || canvas.height !== size.h
+    const ctx = fit(canvas)
     if (!ctx) return
+    if (resized) paintedRef.current = null
 
-    // A mark the agent has queued but not yet reached is in the document and
-    // not yet on the paper. Only this view honours that; every tool result
-    // renders the document in full.
-    const order = paintOrder(scene).filter((s) => presence.isRevealed(s.id))
+    const order = paintOrder(scene).filter((s) => presence.isSettled(s.id))
     const prev = paintedRef.current
 
-    // If the new paint order merely extends the old one, which is the common
-    // case while either of them is painting, only the added strokes need
-    // drawing. A full sheet of washes costs hundreds of polygon fills, far too
-    // slow to redo on every stroke and completely unnecessary.
     const isAppend =
       prev !== null && order.length >= prev.length && prev.every((s, i) => order[i] === s)
 
@@ -112,55 +123,51 @@ export function Sheet() {
     paintedRef.current = order
   })
 
-  /* ---------------- agent flash ---------------- */
+  /* ---------------- fx: what is still wet ---------------- */
 
-  useEffect(() => {
-    if (ui.recentAgent.length === 0) return
-    flashRef.current = { ids: ui.recentAgent, at: performance.now() }
-    let raf = 0
-    const step = () => {
-      const flash = flashRef.current
-      if (!flash) return
-      tick((n) => n + 1)
-      if (performance.now() - flash.at > FLASH_MS) {
-        flashRef.current = null
-        studio.clearRecentAgent()
-        tick((n) => n + 1)
-        return
-      }
-      raf = requestAnimationFrame(step)
-    }
-    raf = requestAnimationFrame(step)
-    return () => cancelAnimationFrame(raf)
-  }, [ui.recentAgent])
-
-  /* ---------------- overlay ---------------- */
-
-  const drawOverlay = useCallback(() => {
-    const canvas = overlayRef.current
-    if (!canvas || size.w === 0) return
-    if (canvas.width !== size.w || canvas.height !== size.h) {
-      canvas.width = size.w
-      canvas.height = size.h
-    }
-    const ctx = canvas.getContext('2d')
+  const drawFx = useCallback(() => {
+    const ctx = fit(fxRef.current)
     if (!ctx) return
-    const ink = themeInk()
     const sx = size.w / CANVAS_W
     const sy = size.h / CANVAS_H
+    const current = sceneRef.current
+    const tooth = PAPERS[current.paper].tooth
+    const layerOf = new Map(current.layers.map((l) => [l.id, l]))
 
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.clearRect(0, 0, size.w, size.h)
-    ctx.save()
-    ctx.scale(sx, sy)
 
-    // The mark in progress, painted for real rather than outlined. Watercolour
-    // does not behave the way a preview line suggests, so the preview is the
-    // actual wash.
+    const settling = presence.settlingIds
+    if (settling.length > 0) {
+      const byId = new Map(current.strokes.map((s) => [s.id, s]))
+      for (const id of settling) {
+        const stroke = byId.get(id)
+        if (!stroke) continue
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.scale(sx, sy)
+        renderStroke(
+          ctx,
+          stroke,
+          {
+            wetness: layerOf.get(stroke.layerId)?.wetness ?? 0,
+            tooth,
+            settle: presence.settleProgress(id),
+          },
+          sx,
+          sy,
+        )
+      }
+    }
+
+    // The mark in progress, painted for real rather than outlined. A dashed
+    // line looks like a selection lasso, and watercolour never behaves the way
+    // an outline suggests it will.
     const drawing = drawingRef.current
     if (drawing && drawing.points.length > 1) {
       const brush = studio.getUi().brush
       const layer = studio.getLayer(studio.getUi().activeLayerId)
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
+      ctx.scale(sx, sy)
       renderStroke(
         ctx,
         {
@@ -177,13 +184,84 @@ export function Sheet() {
           author: 'human',
           createdAt: 0,
         },
-        { wetness: layer?.wetness ?? 0, tooth: PAPERS[scene.paper].tooth },
+        { wetness: layer?.wetness ?? 0, tooth, settle: 0.55 },
         sx,
         sy,
       )
-      // renderStroke leaves its own transform; put ours back.
-      ctx.setTransform(1, 0, 0, 1, 0, 0)
-      ctx.scale(sx, sy)
+    }
+  }, [fit, size])
+
+  /** Keep repainting for as long as anything is wet or being drawn. */
+  const pumpFx = useCallback(() => {
+    if (fxFrameRef.current) return
+    const step = () => {
+      fxFrameRef.current = 0
+      drawFx()
+      if (presence.settlingIds.length > 0 || drawingRef.current) {
+        fxFrameRef.current = requestAnimationFrame(step)
+      }
+    }
+    fxFrameRef.current = requestAnimationFrame(step)
+  }, [drawFx])
+
+  useEffect(() => {
+    const stop = presence.subscribe(() => {
+      pumpFx()
+      // Only the completion of a wash needs React, and presence reports that
+      // once rather than on every frame.
+      tick((n) => n + 1)
+    })
+    pumpFx()
+    return () => {
+      stop()
+      if (fxFrameRef.current) cancelAnimationFrame(fxFrameRef.current)
+    }
+  }, [pumpFx])
+
+  useEffect(() => {
+    drawFx()
+  }, [drawFx, scene])
+
+  /* ---------------- ui: selection and guides ---------------- */
+
+  const drawUi = useCallback(() => {
+    const ctx = fit(uiRef.current)
+    if (!ctx) return
+    const ink = themeInk()
+    const sx = size.w / CANVAS_W
+    const sy = size.h / CANVAS_H
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.clearRect(0, 0, size.w, size.h)
+    ctx.scale(sx, sy)
+
+    // Guides for the pass the human is on. The one they are about to trace is
+    // drawn plainly; the rest of the pass waits behind it. What they actually
+    // paint is their own line, not the guide: this shows where a mark goes, it
+    // does not make the mark.
+    const step = duet && duet.index < duet.score.steps.length
+      ? duet.score.steps[duet.index]
+      : null
+    if (step?.by === 'human' && step.guides) {
+      ctx.save()
+      ctx.lineJoin = 'round'
+      ctx.lineCap = 'round'
+      for (let i = duet!.traced; i < step.guides.length; i++) {
+        const upNext = i === duet!.traced
+        ctx.strokeStyle = ink.accent
+        ctx.globalAlpha = upNext ? 0.75 : 0.24
+        ctx.lineWidth = upNext ? 2 : 1.4
+        ctx.setLineDash(upNext ? [10, 7] : [4, 7])
+        ctx.lineDashOffset = upNext ? -(performance.now() / 60) % 17 : 0
+        for (const run of sampleSubpaths(step.guides[i], 8)) {
+          if (run.length < 2) continue
+          ctx.beginPath()
+          ctx.moveTo(run[0].x, run[0].y)
+          for (const p of run.slice(1)) ctx.lineTo(p.x, p.y)
+          ctx.stroke()
+        }
+      }
+      ctx.restore()
     }
 
     const byId = new Map(scene.strokes.map((s) => [s.id, s]))
@@ -200,20 +278,76 @@ export function Sheet() {
       const pulse = Math.sin(age / 190) * 0.5 + 0.5
       for (const id of flash.ids) {
         const stroke = byId.get(id)
-        if (stroke && presence.isRevealed(id)) {
-          outline(ctx, stroke, ink.agent, 2.6, fade * (0.3 + pulse * 0.4))
+        if (stroke && presence.isSettled(id)) {
+          outline(ctx, stroke, ink.agent, 2.6, fade * (0.28 + pulse * 0.36))
         }
       }
     }
+  }, [duet, fit, scene, size, ui.selection])
 
-    // The brush footprint, in paper units, so you can see how big the mark
-    // will be before you commit to it.
+  useEffect(() => {
+    drawUi()
+  })
+
+  // The guide's dashes crawl, so a line waiting to be traced reads as an
+  // instruction rather than as part of the painting.
+  useEffect(() => {
+    const step = duet && duet.index < duet.score.steps.length
+      ? duet.score.steps[duet.index]
+      : null
+    if (step?.by !== 'human') return
+    let raf = 0
+    const step2 = () => {
+      drawUi()
+      raf = requestAnimationFrame(step2)
+    }
+    raf = requestAnimationFrame(step2)
+    return () => cancelAnimationFrame(raf)
+  }, [drawUi, duet])
+
+  useEffect(() => {
+    if (ui.recentAgent.length === 0) return
+    flashRef.current = { ids: ui.recentAgent, at: performance.now() }
+    let raf = 0
+    const step = () => {
+      const flash = flashRef.current
+      if (!flash) return
+      drawUi()
+      if (performance.now() - flash.at > FLASH_MS) {
+        flashRef.current = null
+        studio.clearRecentAgent()
+        drawUi()
+        return
+      }
+      raf = requestAnimationFrame(step)
+    }
+    raf = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(raf)
+  }, [drawUi, ui.recentAgent])
+
+  /* ---------------- cursor: the two hands ---------------- */
+
+  const drawCursors = useCallback(() => {
+    const ctx = fit(cursorRef.current)
+    if (!ctx) return
+    const ink = themeInk()
+    const sx = size.w / CANVAS_W
+    const sy = size.h / CANVAS_H
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.clearRect(0, 0, size.w, size.h)
+
     const human = presence.cursor('human')
-    if (human.visible && ui.mode === 'paint') {
-      const spec = BRUSHES[ui.brush.kind]
-      const r = (spec.baseWidth * (0.34 + ui.brush.pressure * 0.92)) / 2
+    const mode = studio.getUi().mode
+    const brush = studio.getUi().brush
+
+    // The brush footprint, in paper units, so the size of the mark is known
+    // before it is made.
+    if (human.visible && mode === 'paint') {
+      const r = (BRUSHES[brush.kind].baseWidth * (0.34 + brush.pressure * 0.92)) / 2
       ctx.save()
-      ctx.globalAlpha = human.painting ? 0.5 : 0.32
+      ctx.scale(sx, sy)
+      ctx.globalAlpha = human.painting ? 0.45 : 0.28
       ctx.strokeStyle = ink.guide
       ctx.lineWidth = 1 / ((sx + sy) / 2)
       ctx.beginPath()
@@ -222,10 +356,6 @@ export function Sheet() {
       ctx.restore()
     }
 
-    ctx.restore()
-
-    // Cursors are drawn in screen units so they stay a readable size however
-    // large the sheet is.
     const agent = presence.cursor('agent')
     if (agent.visible) {
       drawCursor(ctx, agent.x * sx, agent.y * sy, ink.agent, 'Agent', 'Agent is painting', agent.painting, sx)
@@ -233,11 +363,14 @@ export function Sheet() {
     if (human.visible) {
       drawCursor(ctx, human.x * sx, human.y * sy, ink.accent, 'You', 'You are painting', human.painting, sx)
     }
-  }, [scene, size, ui.selection, ui.brush, ui.mode])
+  }, [fit, size])
 
+  // Straight off presence, never through React, so the cursor lands in the same
+  // task as the pointer event that moved it.
   useEffect(() => {
-    drawOverlay()
-  })
+    drawCursors()
+    return presence.subscribe(drawCursors)
+  }, [drawCursors])
 
   /* ---------------- pointer ---------------- */
 
@@ -276,8 +409,9 @@ export function Sheet() {
       }
 
       drawingRef.current = { points: [pt] }
+      pumpFx()
     },
-    [scene, toSheet, ui.mode, ui.selection],
+    [pumpFx, scene, toSheet, ui.mode, ui.selection],
   )
 
   const onPointerMove = useCallback(
@@ -291,8 +425,6 @@ export function Sheet() {
         const dx = pt.x - drag.last.x
         const dy = pt.y - drag.last.y
         drag.moved += Math.hypot(dx, dy)
-        // Only commit once it is clearly a drag, so a plain click to select
-        // does not push a no-op onto the undo stack.
         if (drag.moved > CLICK_SLOP && drag.ids.length > 0) {
           studio.move(drag.ids, dx, dy, 'human')
           drag.last = pt
@@ -304,46 +436,30 @@ export function Sheet() {
       const last = drawing.points[drawing.points.length - 1]
       if (Math.hypot(pt.x - last.x, pt.y - last.y) < 2.2) return
       drawing.points.push(pt)
-
-      // Repainting the wash is a few milliseconds, so it is thrown at the next
-      // frame rather than run for every pointer event.
-      if (!frameRef.current) {
-        frameRef.current = requestAnimationFrame(() => {
-          frameRef.current = 0
-          drawOverlay()
-        })
-      }
+      pumpFx()
     },
-    [drawOverlay, toSheet],
+    [pumpFx, toSheet],
   )
 
   const finish = useCallback(() => {
     dragRef.current = null
     const drawing = drawingRef.current
     drawingRef.current = null
-    presence.setHuman(
-      presence.cursor('human').x,
-      presence.cursor('human').y,
-      false,
-    )
-    if (!drawing) {
-      drawOverlay()
-      return
-    }
+    const at = presence.cursor('human')
+    presence.setHuman(at.x, at.y, false)
 
-    const points = decimate(drawing.points, 2.5)
-    if (points.length < 2) {
-      drawOverlay()
-      return
+    if (drawing) {
+      const points = decimate(drawing.points, 2.5)
+      if (points.length >= 2) {
+        const brush = studio.getUi().brush
+        studio.paint(
+          { path: pointsToPath(points) + (brush.fill ? ' Z' : ''), fill: brush.fill },
+          'human',
+        )
+      }
     }
-
-    const brush = studio.getUi().brush
-    studio.paint(
-      { path: pointsToPath(points) + (brush.fill ? ' Z' : ''), fill: brush.fill },
-      'human',
-    )
-    drawOverlay()
-  }, [drawOverlay])
+    drawFx()
+  }, [drawFx])
 
   /* ---------------- keyboard ---------------- */
 
@@ -374,19 +490,20 @@ export function Sheet() {
     <div ref={wrapRef}>
       <div className="sheet-frame">
         <canvas ref={mainRef} className="sheet-layer" />
+        <canvas ref={fxRef} className="sheet-layer" />
+        <canvas ref={uiRef} className="sheet-layer" />
         <canvas
-          ref={overlayRef}
-          className={`sheet-layer sheet-layer--interactive ${
-            ui.mode === 'paint' ? 'cursor-paint' : 'cursor-pick'
-          }`}
+          ref={cursorRef}
+          className="sheet-layer sheet-layer--interactive"
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={finish}
           onPointerCancel={finish}
-          onPointerLeave={() => {
-            presence.hideHuman()
-            drawOverlay()
+          onPointerEnter={(e) => {
+            const pt = toSheet(e)
+            presence.setHuman(pt.x, pt.y, false)
           }}
+          onPointerLeave={() => presence.hideHuman()}
         />
       </div>
     </div>
@@ -435,22 +552,19 @@ function drawCursor(
 
   ctx.shadowColor = 'transparent'
 
-  // Name tag.
   ctx.font = '600 10px ui-sans-serif, system-ui, sans-serif'
   const text = painting ? busyLabel : label
   const w = ctx.measureText(text).width + 12
   const h = 17
-  const bx = 13
-  const by = 13
 
   ctx.beginPath()
-  ctx.roundRect(bx, by, w, h, 8)
+  ctx.roundRect(13, 13, w, h, 8)
   ctx.fillStyle = colour
   ctx.fill()
 
   ctx.fillStyle = '#ffffff'
   ctx.textBaseline = 'middle'
-  ctx.fillText(text, bx + 6, by + h / 2 + 0.5)
+  ctx.fillText(text, 19, 13 + h / 2 + 0.5)
   ctx.restore()
 }
 
@@ -478,5 +592,3 @@ function outline(
   }
   ctx.restore()
 }
-
-export type { Who }

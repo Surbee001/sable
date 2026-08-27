@@ -242,6 +242,14 @@ export function renderPaper(
 export interface StrokeContext {
   wetness: number
   tooth: number
+  /**
+   * How far this mark has got into the paper, 0 to 1. Defaults to fully dry.
+   *
+   * A wash goes on pale and tight, creeps outward into the fibre, deepens, and
+   * only pulls its dark rim once it begins to dry. Rendering the finished state
+   * immediately is the difference between paint and a decal.
+   */
+  settle?: number
 }
 
 let scratch: HTMLCanvasElement | null = null
@@ -303,7 +311,10 @@ export function renderStroke(
   const stamps = Math.round(
     TUNING.stampsDry + water * (TUNING.stampsWet - TUNING.stampsDry),
   )
-  const spread = TUNING.spread * (0.2 + water * 0.8 + wetness * 0.5)
+  const settle = context.settle === undefined ? 1 : clamp01(context.settle)
+  const spreadFull = TUNING.spread * (0.2 + water * 0.8 + wetness * 0.5)
+  // The wash starts as a tight core and creeps out to its full reach.
+  const spread = spreadFull * (0.22 + settle * 0.78)
   const radius = spanRadius(allPoints)
   // A big wash pools further than a small one, so drift scales with the mark.
   const drift =
@@ -316,9 +327,24 @@ export function renderStroke(
   const [rgb, alpha] = pigmentInk(pigment, stroke)
   const falloff = 1.4 + (1 - water) * 2.5
 
+  /**
+   * Fill rule.
+   *
+   * evenodd is what lets a path with a second subpath inside it paint a ring
+   * rather than a disc, so a shape drawn with a hole in it keeps the hole. But
+   * it also means any path that crosses itself cancels where it overlaps, and a
+   * brush dragged back over its own line makes exactly that: a ribbon crossing
+   * itself, punched through with holes where the painter went over twice.
+   * Multiple subpaths are a deliberate hole; one subpath crossing itself is
+   * just someone working into a mark.
+   */
+  const rule: CanvasFillRule = runs.length > 1 ? 'evenodd' : 'nonzero'
+
+  // Measured at full spread so the working area covers where the mark will end
+  // up, not where it currently is.
   const reach = filled
-    ? spanRadius(allPoints) * spread + drift + 14
-    : halfWidth * (1 + spread) + rough * halfWidth * 4 + drift + 12
+    ? spanRadius(allPoints) * spreadFull + drift + 14
+    : halfWidth * (1 + spreadFull) + rough * halfWidth * 4 + drift + 12
   const dev = boundsOf(allPoints, reach)
   const px = {
     x: Math.max(0, Math.floor(dev.x * scaleX) - 2),
@@ -403,7 +429,9 @@ export function renderStroke(
     TUNING.edgeDarken *
     (0.3 + water * 0.7) *
     (1 - pigment.staining * 0.35) *
-    (0.18 + load * 0.82)
+    (0.18 + load * 0.82) *
+    // The rim is left behind by evaporation, so it is the last thing to appear.
+    settle * settle
   if (rim > 0.02 && rimPolys) {
     bctx.lineJoin = 'round'
     bctx.lineCap = 'round'
@@ -419,7 +447,8 @@ export function renderStroke(
 
   // Granulation: heavy particles drop into the valleys of the tooth.
   // Same reasoning: no pigment in suspension, nothing to settle into the tooth.
-  const gran = pigment.granulation * context.tooth * TUNING.granulation * (0.2 + load * 0.8)
+  const gran =
+    pigment.granulation * context.tooth * TUNING.granulation * (0.2 + load * 0.8) * settle
   if (gran > 0.06 && widest.length) {
     // Each mark gets its own grain orientation, so the tile never lines up
     // with its neighbours into a visible weave.
@@ -429,7 +458,7 @@ export function renderStroke(
       bctx.save()
       bctx.beginPath()
       for (const poly of widest) addPolygon(bctx, poly)
-      bctx.clip('evenodd')
+      bctx.clip(rule)
       bctx.globalCompositeOperation = 'multiply'
       bctx.globalAlpha = Math.min(0.85, gran * (0.45 + water * 0.55))
       bctx.fillStyle = pattern
@@ -458,7 +487,7 @@ export function renderStroke(
     bctx.save()
     bctx.beginPath()
     for (const poly of widest) addPolygon(bctx, poly)
-    bctx.clip('evenodd')
+    bctx.clip(rule)
     bctx.globalCompositeOperation = 'multiply'
     bctx.globalAlpha = 1
     bctx.fillStyle = grad
@@ -469,7 +498,8 @@ export function renderStroke(
   // Blooms. Drop clean water into a wash that has begun to set and it shoves
   // the pigment outward into a pale cauliflower. Lifting pigment back out of
   // the buffer is exactly what destination-out does.
-  if (water > 0.62 && widest.length) {
+  // A bloom needs the wash to have begun setting before water can push it.
+  if (water > 0.62 && settle > 0.72 && widest.length) {
     applyBloom(bctx, widest.flat(), stroke.seed, water, TUNING.bloom)
   }
 
