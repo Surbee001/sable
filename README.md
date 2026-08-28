@@ -70,11 +70,15 @@ as the fallback. All of it is in `lib/webmcp.ts`.
 | Tool | What it does |
 | --- | --- |
 | `assess_painting` | **Measures** the sheet and says what it needs next |
+| `find_strokes` | Finds marks by pigment, author, region or note, without reading everything |
+| `select_strokes` | Highlights marks on the human's screen, to point at something |
+| `set_brush` | Loads the brush the human is holding, and sets their mode |
+| `undo`, `redo`, `clear_sheet` | Full control of the canvas, always available |
 | `look_at_canvas` | An image of the sheet, plus a written summary |
 | `inspect_region` | An enlarged crop, for judging one passage |
 | `read_painting` | Every stroke as data: id, pigment, water, bounds, path |
 | `paint` | Lays down one or many marks, returning an image of the result |
-| `revise_stroke` | Changes a mark already down, by id, keeping it the same mark |
+| `revise_stroke` | Changes marks already down, one or many, keeping them the same marks |
 | `transform_strokes` | Moves and resizes without repainting |
 | `lift_strokes` | Takes marks back off |
 | `suggest_palette` | Seven limited palettes, with a role per pigment |
@@ -133,20 +137,9 @@ and paints the pass, unless something is already attached, which it knows
 because tool calls are counted in two kinds: one that changes the painting means
 the turn is taken, one that only looks means something is still thinking.
 
-## The timeline
-
-Under the sheet, the journey in two lanes: the agent's marks above, yours below.
-Long runs in one lane are somebody working alone; where they interleave is where
-the painting was made together. Play it back and it rebuilds mark by mark, with
-the one that just landed ringed on the paper.
-
-Only possible because the sheet is a list of marks rather than a picture of
-them. A flattened image cannot be asked what it looked like ten minutes ago.
-
 ## Try it
 
-The sheet already has a study on it, painted partly by an agent and partly by
-hand, as the log shows.
+The sheet starts blank. Paint on it, or open **Duet** and paint one in turns.
 
 - Press **V**, click any mark, and the Mark panel takes it apart: pigment,
   water, pressure, brush, its literal SVG path. Change any of it.
@@ -184,6 +177,7 @@ lib/
   presence.ts     cursors, and when a mark appears rather than when it exists
   conductor.ts    whose turn it is, without anyone pressing anything
   duet.ts         the score
+  fallback-context.ts  our own document.modelContext, for when nothing supplies one
   snapshot.ts     offscreen rendering, so tools can return images
 components/       the studio UI
 app/globals.css   the design system, including every swatch colour

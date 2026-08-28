@@ -3,7 +3,6 @@
 import {
   ArrowClockwise,
   ArrowCounterClockwise,
-  ArrowUUpLeft,
   DownloadSimple,
   FilePlus,
   Moon,
@@ -22,7 +21,6 @@ import { AgentPanel } from './AgentPanel'
 import { Duet } from './Duet'
 import { Inspector } from './Inspector'
 import { Layers } from './Layers'
-import { Timeline } from './Timeline'
 import { Sheet } from './Sheet'
 import { Toolbox } from './Toolbox'
 import { Welcome } from './Welcome'
@@ -167,7 +165,6 @@ export function Studio() {
         <div className="stage">
           <div className="stage-inner">
             <Sheet />
-            <Timeline />
           </div>
         </div>
 
@@ -234,18 +231,10 @@ export function Studio() {
         <span className="spacer" />
 
         <div className="pill">
-          {scene.strokes.length === 0 ? (
-            <Button
-              onClick={() => studio.restoreSeed('human')}
-              title="Bring back the demonstration study"
-            >
-              Restore
-            </Button>
-          ) : (
-            <Button onClick={() => studio.newSheet('human')} title="Tape down a blank sheet">
-              New
-            </Button>
-          )}
+          <Button onClick={() => studio.newSheet('human')} title="Tape down a blank sheet">
+            <FilePlus size={12} weight="bold" />
+            New
+          </Button>
           <Button onClick={() => studio.undo()} disabled={!canUndo} title="Undo, or press Cmd Z">
             Undo
           </Button>
@@ -269,7 +258,6 @@ export function Studio() {
       <div className="stage">
         <div className="stage-inner">
           <Sheet />
-          <Timeline />
         </div>
       </div>
 

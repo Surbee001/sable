@@ -1,7 +1,6 @@
 import { translatePath } from './geometry'
 import { KAWA, type DuetScore, type DuetStep } from './duet'
 import { presence } from './presence'
-import { seedScene } from './seed'
 import {
   BRUSHES,
   CANVAS_H,
@@ -79,8 +78,6 @@ export interface DuetState {
 
 export interface StudioSnapshot {
   scene: Scene
-  /** How many marks of the history to show, or null for the finished sheet. */
-  replay: number | null
   ui: UiState
   activity: Activity[]
   duet: DuetState | null
@@ -140,7 +137,7 @@ function blankScene(): Scene {
  * could not have produced.
  */
 class Studio {
-  private scene: Scene = seedScene()
+  private scene: Scene = blankScene()
   private ui: UiState = {
     mode: 'paint',
     activeLayerId: 'mid',
@@ -158,7 +155,6 @@ class Studio {
   }
   private activity: Activity[] = []
   private duet: DuetState | null = null
-  private replay: number | null = null
   private past: Scene[] = []
   private future: Scene[] = []
   private listeners = new Set<() => void>()
@@ -176,7 +172,6 @@ class Studio {
   private build(): StudioSnapshot {
     return {
       scene: this.scene,
-      replay: this.replay,
       ui: this.ui,
       activity: this.activity,
       duet: this.duet,
@@ -238,7 +233,6 @@ class Studio {
   /* -------------------- painting -------------------- */
 
   paint(input: PaintInput, author: Author): Stroke {
-    this.replay = null
     const layer =
       this.resolveLayer(input.layerId) ??
       this.getLayer(this.ui.activeLayerId) ??
@@ -280,7 +274,6 @@ class Studio {
   /** Paint several strokes as one undoable action, the way an agent lays in a pass. */
   paintMany(inputs: PaintInput[], author: Author, summary?: string): Stroke[] {
     if (inputs.length === 0) return []
-    this.replay = null
     this.checkpoint()
 
     const made: Stroke[] = []
@@ -507,22 +500,6 @@ class Studio {
     this.emit()
   }
 
-  restoreSeed(author: Author): void {
-    this.checkpoint()
-    this.scene = seedScene()
-    this.ui = { ...this.ui, selection: [] }
-    this.log(author, 'note', 'Brought back the demonstration study')
-    this.emit()
-  }
-
-  load(scene: Scene, author: Author, summary = 'Loaded a study'): void {
-    this.checkpoint()
-    this.scene = scene
-    this.ui = { ...this.ui, selection: [] }
-    this.log(author, 'note', summary)
-    this.emit()
-  }
-
   /* -------------------- history -------------------- */
 
   undo(author: Author = 'human'): boolean {
@@ -564,20 +541,6 @@ class Studio {
 
   setMode(mode: Mode): void {
     this.ui = { ...this.ui, mode, selection: mode === 'paint' ? [] : this.ui.selection }
-    this.emit()
-  }
-
-  /* -------------------- replay -------------------- */
-
-  /**
-   * Wind the painting back.
-   *
-   * Only possible because the sheet is a list of marks rather than a picture of
-   * them: there is nothing to reconstruct, just fewer of them to draw. A bitmap
-   * cannot be asked what it looked like an hour ago.
-   */
-  setReplay(at: number | null): void {
-    this.replay = at
     this.emit()
   }
 

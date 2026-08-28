@@ -24,6 +24,7 @@ const GROUPS: Array<{
       'look_at_canvas',
       'inspect_region',
       'read_painting',
+      'find_strokes',
       'describe_selection',
     ],
   },
@@ -31,19 +32,35 @@ const GROUPS: Array<{
     id: 'paint',
     label: 'Painting',
     Icon: PaintBrush,
-    tools: ['paint', 'revise_stroke', 'revise_selection', 'transform_strokes', 'lift_strokes'],
+    tools: [
+      'paint',
+      'revise_stroke',
+      'revise_selection',
+      'transform_strokes',
+      'lift_strokes',
+      'undo',
+      'redo',
+      'clear_sheet',
+    ],
   },
   {
     id: 'setup',
     label: 'Setting up',
     Icon: Palette,
-    tools: ['suggest_palette', 'list_palette', 'manage_layers', 'set_sheet'],
+    tools: [
+      'suggest_palette',
+      'list_palette',
+      'set_brush',
+      'select_strokes',
+      'manage_layers',
+      'set_sheet',
+    ],
   },
   {
     id: 'state',
     label: 'Only right now',
     Icon: Lightning,
-    tools: ['duet_status', 'duet_complete_turn', 'undo', 'redo', 'clear_sheet'],
+    tools: ['duet_status', 'duet_complete_turn'],
   },
 ]
 
@@ -53,9 +70,6 @@ const CONTEXTUAL = new Set([
   'revise_selection',
   'duet_status',
   'duet_complete_turn',
-  'undo',
-  'redo',
-  'clear_sheet',
 ])
 
 const EMPTY: SurfaceStatus = {

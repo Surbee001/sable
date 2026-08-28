@@ -411,14 +411,20 @@ function coreTools(): ToolDef[] {
     {
       name: 'revise_stroke',
       description:
-        'Change a mark that is already on the sheet, by id, keeping it the same mark. This is the part ' +
-        'that a prompt-only image model cannot do: the stroke stays an object, so its water, pigment, ' +
-        'pressure or even its path can be changed after the fact without repainting anything around it. ' +
-        'Get ids from read_painting.',
+        'Change marks that are already on the sheet, keeping them the same marks. This is the ' +
+        'part a prompt-only image model cannot do: a stroke stays an object, so its pigment, ' +
+        'water, pressure, brush or even its path can be changed afterwards without repainting ' +
+        'anything around it. Changing the colour of something already painted is this tool ' +
+        'with a pigment. Pass one id or many; get ids from find_strokes or read_painting.',
       inputSchema: {
         type: 'object',
         properties: {
-          id: { type: 'string', description: 'The stroke id, from read_painting.' },
+          id: { type: 'string', description: 'A stroke id. Use this or "ids".' },
+          ids: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Several stroke ids, to change them all the same way in one action.',
+          },
           path: { type: 'string', description: 'Replacement SVG path data. Omit to keep the existing shape.' },
           fill: STROKE_PROPS.fill,
           brush: STROKE_PROPS.brush,
@@ -429,12 +435,18 @@ function coreTools(): ToolDef[] {
           layer: STROKE_PROPS.layer,
           note: STROKE_PROPS.note,
         },
-        required: ['id'],
       },
-      execute: (input: RawStroke & { id?: string }) => {
-        const id = typeof input?.id === 'string' ? input.id : ''
-        const existing = studio.getStroke(id)
-        if (!existing) return fail(`No stroke with id "${id}". Call read_painting for current ids.`)
+      execute: (input: RawStroke & { id?: string; ids?: string[] }) => {
+        const wanted = [
+          ...(typeof input?.id === 'string' ? [input.id] : []),
+          ...(Array.isArray(input?.ids) ? input.ids.filter((i) => typeof i === 'string') : []),
+        ]
+        if (wanted.length === 0) return fail('Pass an id, or a list of ids.')
+        const targets = wanted.filter((i) => studio.getStroke(i))
+        if (targets.length === 0) {
+          return fail(`None of those ids are on the sheet. Call find_strokes or read_painting.`)
+        }
+        const existing = studio.getStroke(targets[0])!
 
         const patch: StrokePatch = {}
         if (typeof input.path === 'string' && input.path.trim()) {
@@ -466,13 +478,13 @@ function coreTools(): ToolDef[] {
           return fail('Nothing to change. Pass at least one property besides id.')
         }
 
-        const next = studio.update(id, patch, 'agent')
-        if (!next) return fail(`Could not revise "${id}".`)
+        const revised = studio.updateMany(targets, patch, 'agent')
         const scene = studio.getScene()
         return show(
-          `Revised ${id}. ${Object.keys(patch).join(', ')} changed.`,
+          `Revised ${revised.length} mark${revised.length === 1 ? '' : 's'}: ` +
+            `${Object.keys(patch).join(', ')} changed.`,
           snapshotScene(scene, { width: 760 }),
-          { stroke: summariseStroke(scene, next) },
+          { strokes: revised.map((r) => summariseStroke(scene, r)) },
         )
       },
     },
@@ -574,6 +586,250 @@ function coreTools(): ToolDef[] {
           `Lifted ${gone} stroke${gone === 1 ? '' : 's'}.`,
           snapshotScene(studio.getScene(), { width: 760 }),
         )
+      },
+    },
+
+
+    {
+      name: 'undo',
+      description:
+        'Step the whole studio back one action, including the human\'s. One shared history: ' +
+        'if a mark is wrong, this takes it back off. Always available; it will tell you if ' +
+        'there is nothing left to undo.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          steps: {
+            type: 'number',
+            description: 'How many actions to step back. Default 1.',
+          },
+        },
+      },
+      execute: (input: { steps?: number }) => {
+        const want = Math.max(1, Math.min(40, Math.round(Number(input?.steps) || 1)))
+        let done = 0
+        while (done < want && studio.undo('agent')) done += 1
+        if (done === 0) return say('Nothing left to undo.')
+        return show(
+          `Stepped back ${done} action${done === 1 ? '' : 's'}.`,
+          snapshotScene(studio.getScene(), { width: 760 }),
+        )
+      },
+    },
+
+    {
+      name: 'redo',
+      description: 'Step the studio forward again after an undo.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          steps: { type: 'number', description: 'How many actions to step forward. Default 1.' },
+        },
+      },
+      execute: (input: { steps?: number }) => {
+        const want = Math.max(1, Math.min(40, Math.round(Number(input?.steps) || 1)))
+        let done = 0
+        while (done < want && studio.redo('agent')) done += 1
+        if (done === 0) return say('Nothing to redo.')
+        return show(
+          `Stepped forward ${done} action${done === 1 ? '' : 's'}.`,
+          snapshotScene(studio.getScene(), { width: 760 }),
+        )
+      },
+    },
+
+    {
+      name: 'clear_sheet',
+      description:
+        'Take every mark off the sheet. The human can undo it, but ask first if there is work ' +
+        'on there that is not yours.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          confirm: {
+            type: 'boolean',
+            description: 'Must be true. A guard against wiping somebody else\'s painting.',
+          },
+        },
+        required: ['confirm'],
+      },
+      execute: (input: { confirm?: unknown }) => {
+        if (input?.confirm !== true) return fail('Set confirm: true to clear the sheet.')
+        const had = studio.getScene().strokes.length
+        if (had === 0) return say('The sheet is already empty.')
+        studio.clear('agent')
+        return say(`Cleared ${had} mark${had === 1 ? '' : 's'}. The human can undo this.`)
+      },
+    },
+
+    {
+      name: 'find_strokes',
+      description:
+        'Find marks without reading the whole painting. Filter by pigment, author, brush, ' +
+        'whether it is a wash, a word in its note, or a rectangle of the sheet it overlaps. ' +
+        'This is how you get from "the sun" to an id you can act on: the sun is the big ' +
+        'cadmium red wash in the upper right, so filter by pigment and region and you have it.',
+      annotations: { readOnlyHint: true },
+      inputSchema: {
+        type: 'object',
+        properties: {
+          pigment: { type: 'string', description: 'Pigment id or name.' },
+          author: { type: 'string', enum: ['human', 'agent'], description: 'Who painted it.' },
+          brush: { type: 'string', enum: BRUSH_NAMES },
+          fill: { type: 'boolean', description: 'true for washes, false for strokes.' },
+          note: { type: 'string', description: 'A word appearing in the mark\'s note.' },
+          layer: { type: 'string', description: 'Layer name or id.' },
+          region: {
+            type: 'object',
+            description: 'Only marks overlapping this rectangle of the sheet.',
+            properties: {
+              x: { type: 'number' }, y: { type: 'number' },
+              width: { type: 'number' }, height: { type: 'number' },
+            },
+          },
+          largest: {
+            type: 'boolean',
+            description: 'Sort biggest first, which is usually what "the sun" or "the sky" means.',
+          },
+        },
+      },
+      execute: (input: {
+        pigment?: string; author?: string; brush?: string; fill?: unknown
+        note?: string; layer?: string; largest?: unknown
+        region?: { x?: number; y?: number; width?: number; height?: number }
+      }) => {
+        const scene = studio.getScene()
+        let found = describeScene(scene).strokes
+
+        if (input?.pigment) {
+          const p = resolvePigment(String(input.pigment))
+          if (!p) return fail(`No pigment matches "${String(input.pigment)}".`)
+          found = found.filter((s) => s.pigment === p.name)
+        }
+        if (input?.author === 'human' || input?.author === 'agent') {
+          found = found.filter((s) => s.author === input.author)
+        }
+        if (typeof input?.brush === 'string') found = found.filter((s) => s.brush === input.brush)
+        if (input?.fill !== undefined) {
+          const want = input.fill === true || input.fill === 'true'
+          found = found.filter((s) => s.fill === want)
+        }
+        if (typeof input?.note === 'string' && input.note.trim()) {
+          const q = input.note.trim().toLowerCase()
+          found = found.filter((s) => (s.note ?? '').toLowerCase().includes(q))
+        }
+        if (typeof input?.layer === 'string' && input.layer) {
+          const layer = studio.resolveLayer(input.layer)
+          if (!layer) return fail(`No layer called "${input.layer}".`)
+          found = found.filter((s) => s.layer === layer.name)
+        }
+        const r = input?.region
+        if (r && [r.x, r.y, r.width, r.height].every((n) => Number.isFinite(Number(n)))) {
+          const x = Number(r.x), y = Number(r.y), w = Number(r.width), h = Number(r.height)
+          found = found.filter(
+            (s) =>
+              s.bounds.x < x + w && s.bounds.x + s.bounds.w > x &&
+              s.bounds.y < y + h && s.bounds.y + s.bounds.h > y,
+          )
+        }
+        if (input?.largest === true || input?.largest === 'true') {
+          found = found.slice().sort((a, b) => b.bounds.w * b.bounds.h - a.bounds.w * a.bounds.h)
+        }
+
+        return say(
+          found.length === 0
+            ? 'Nothing on the sheet matches that.'
+            : `${found.length} mark${found.length === 1 ? '' : 's'}: ${found.map((s) => s.id).join(', ')}.`,
+          { strokes: found },
+        )
+      },
+    },
+
+    {
+      name: 'select_strokes',
+      description:
+        'Select marks in the studio, which puts a highlight round them on the human\'s screen ' +
+        'and switches them into select mode. Use it to point: if you are about to change ' +
+        'something, or you are asking which of two they meant, selecting it is quicker and ' +
+        'clearer than describing where it is. Pass an empty list to deselect.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          ids: { type: 'array', items: { type: 'string' }, description: 'Stroke ids to select.' },
+        },
+        required: ['ids'],
+      },
+      execute: (input: { ids?: string[] }) => {
+        const ids = Array.isArray(input?.ids) ? input.ids.filter((i) => typeof i === 'string') : []
+        const real = ids.filter((id) => studio.getStroke(id))
+        if (ids.length > 0 && real.length === 0) return fail('None of those ids are on the sheet.')
+        if (real.length > 0) studio.setMode('select')
+        studio.select(real)
+        return show(
+          real.length === 0
+            ? 'Deselected.'
+            : `Selected ${real.length} mark${real.length === 1 ? '' : 's'} on the human\'s screen.`,
+          snapshotScene(studio.getScene(), { width: 760 }),
+        )
+      },
+    },
+
+    {
+      name: 'set_brush',
+      description:
+        'Load the brush the human is holding, and set what mode they are in. Use it to hand ' +
+        'them something ready to go: "here, try this" is a loaded mop of dilute cerulean, not ' +
+        'a paragraph telling them which sliders to move. It changes nothing already on the ' +
+        'sheet.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          mode: {
+            type: 'string',
+            enum: ['paint', 'select'],
+            description: 'paint puts them on the brush, select lets them pick marks up.',
+          },
+          brush: STROKE_PROPS.brush,
+          pigment: STROKE_PROPS.pigment,
+          water: STROKE_PROPS.water,
+          pressure: STROKE_PROPS.pressure,
+          opacity: STROKE_PROPS.opacity,
+          fill: STROKE_PROPS.fill,
+          layer: STROKE_PROPS.layer,
+        },
+      },
+      execute: (input: RawStroke & { mode?: string }) => {
+        const changed: string[] = []
+        if (input?.mode === 'paint' || input?.mode === 'select') {
+          studio.setMode(input.mode)
+          changed.push(`mode ${input.mode}`)
+        }
+        const patch: Record<string, unknown> = {}
+        const kind = brushOf(input?.brush)
+        if (kind) { patch.kind = kind; changed.push(BRUSHES[kind].label.toLowerCase()) }
+        if (input?.pigment !== undefined && input.pigment !== '') {
+          const found = resolvePigment(String(input.pigment))
+          if (!found) return fail(`No pigment matches "${String(input.pigment)}".`)
+          patch.pigment = found.id
+          changed.push(found.name)
+        }
+        for (const key of ['water', 'pressure', 'opacity'] as const) {
+          const v = optNum((input as Record<string, unknown>)[key])
+          if (v !== undefined) { patch[key] = v; changed.push(`${key} ${v}`) }
+        }
+        if (input?.fill !== undefined) {
+          patch.fill = input.fill === true || input.fill === 'true'
+          changed.push(patch.fill ? 'wash' : 'stroke')
+        }
+        if (typeof input?.layer === 'string' && input.layer) {
+          const layer = studio.resolveLayer(input.layer)
+          if (!layer) return fail(`No layer called "${input.layer}".`)
+          studio.setActiveLayer(layer.id)
+          changed.push(`layer ${layer.name}`)
+        }
+        if (Object.keys(patch).length > 0) studio.setBrush(patch as never)
+        if (changed.length === 0) return fail('Nothing to set. Pass a mode, a brush or a load.')
+        return say(`Brush loaded: ${changed.join(', ')}.`)
       },
     },
 
@@ -931,58 +1187,6 @@ function contextualTools(): ToolDef[] {
         },
       })
     }
-  }
-
-  if (canUndo) {
-    tools.push({
-      name: 'undo',
-      description:
-        'Step the whole studio back one action, including the human\'s. One shared history: ' +
-        'if a mark you made is wrong, this takes it back off.',
-      inputSchema: { type: 'object', properties: {} },
-      execute: () => {
-        studio.undo('agent')
-        return show('Stepped back one action.', snapshotScene(studio.getScene(), { width: 760 }))
-      },
-    })
-  }
-
-  if (canRedo) {
-    tools.push({
-      name: 'redo',
-      description: 'Step the studio forward again, after an undo.',
-      inputSchema: { type: 'object', properties: {} },
-      execute: () => {
-        studio.redo('agent')
-        return show('Stepped forward one action.', snapshotScene(studio.getScene(), { width: 760 }))
-      },
-    })
-  }
-
-  if (scene.strokes.length > 0) {
-    tools.push({
-      name: 'clear_sheet',
-      description:
-        'Take every mark off the sheet and start again. Destructive, though the human can undo it. ' +
-        'Ask before using this on work they painted themselves.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          confirm: {
-            type: 'boolean',
-            description: 'Must be true. A guard against clearing someone else\'s painting by accident.',
-          },
-        },
-        required: ['confirm'],
-      },
-      execute: (input: { confirm?: unknown }) => {
-        if (input?.confirm !== true) {
-          return fail('Set confirm: true to clear the sheet.')
-        }
-        studio.clear('agent')
-        return say('Sheet cleared.')
-      },
-    })
   }
 
   return tools
