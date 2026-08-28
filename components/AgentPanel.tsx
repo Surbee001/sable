@@ -87,12 +87,12 @@ const TRANSPORT: Record<
   bridge: { dot: 'dot--live', label: 'Connected through an extension' },
   local: {
     dot: 'dot--local',
-    label: 'Polyfill only, nothing connected',
+    label: 'Registered in page',
     detail:
-      'Every tool below is registered and working, but the polyfill carries no transport, ' +
-      'so no agent outside this page can call them yet. In Chrome 149 or later, enable ' +
-      'chrome://flags/#enable-webmcp-testing and reload: this line turns green and the ' +
-      'WebMCP panel in DevTools lists the toolbox.',
+      'All of these are registered on document.modelContext and live. This browser supplied ' +
+      'no context of its own, so the page installed one. If you are an agent and these tools ' +
+      'appear in your list, call them. If they do not, the browser is not bridging WebMCP to ' +
+      'you: try Chrome with chrome://flags/#enable-webmcp-testing, or a bridge extension.',
   },
   none: {
     dot: 'dot--off',
