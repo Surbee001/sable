@@ -1634,3 +1634,48 @@ body {
 .replay-who--agent {
   color: var(--agent);
 }
+
+/* ------------------------------------------------------------- tooltips */
+
+/*
+   The rails scroll, so a tooltip floating out of one would be clipped by the
+   scroll container. Instead each group of controls is the positioning context
+   and the tooltip lands in the same slot beneath it, whichever control in the
+   group you are pointing at. One place to look, and nothing to clip.
+*/
+.tip-group {
+  position: relative;
+}
+
+.tip-group [data-tip] {
+  position: static;
+}
+
+.tip-group [data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1.4;
+  text-align: left;
+  opacity: 0;
+  transform: translateY(-3px);
+  pointer-events: none;
+  transition:
+    opacity 0.14s var(--ease),
+    transform 0.14s var(--ease);
+}
+
+.tip-group [data-tip]:hover::after,
+.tip-group [data-tip]:focus-visible::after {
+  opacity: 1;
+  transform: translateY(0);
+}

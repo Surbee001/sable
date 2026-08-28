@@ -90,9 +90,9 @@ const TRANSPORT: Record<
     label: 'Polyfill only, nothing connected',
     detail:
       'Every tool below is registered and working, but the polyfill carries no transport, ' +
-      'so no agent outside this page can call them yet. Three things can: Chrome launched ' +
-      'with --enable-features=WebMCP, ChatGPT’s in-app browser, or the MCP-B extension from ' +
-      'docs.mcp-b.ai, which relays this toolbox out to a client such as Claude Desktop.',
+      'so no agent outside this page can call them yet. In Chrome 149 or later, enable ' +
+      'chrome://flags/#enable-webmcp-testing and reload: this line turns green and the ' +
+      'WebMCP panel in DevTools lists the toolbox.',
   },
   none: {
     dot: 'dot--off',
@@ -181,9 +181,11 @@ export function AgentPanel() {
 
       <p className="note note--spaced">
         {contextualCount > 0
-          ? `${contextualCount} of these exist only in the studio's current state. Select a mark and watch the toolbox change.`
-          : 'The toolbox is live. Select a mark and tools for revising it appear here.'}
-        {status.callCount > 0 ? ` ${status.callCount} calls so far.` : ''}
+          ? `${contextualCount} exist only right now.`
+          : 'Select a mark and tools for it appear.'}
+        {status.callCount > 0
+          ? ` ${status.callCount} call${status.callCount === 1 ? '' : 's'} so far.`
+          : ''}
       </p>
     </>
   )

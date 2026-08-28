@@ -168,7 +168,8 @@ where the score imagined they would be, so its brief tells it to go and look
 first.
 
 The guide shows where a mark goes. It does not make the mark: what lands on the
-paper is your line, with your hand in it. Your brush is loaded for you at the
+paper is your line, with your hand in it. The panel keeps its instruction to one
+line; the full brief goes to the agent, which is who it is for. Your brush is loaded for you at the
 start of each pass, so a pass is about placement rather than about hunting for
 the right pigment.
 
@@ -253,13 +254,18 @@ The page is a WebMCP *provider*: it registers tools on `document.modelContext`
 and never speaks MCP itself. Something else has to carry the calls in. There are
 three ways that happens, and the Agent tab tells you which one you are in.
 
-- **The browser implements WebMCP.** Chrome launched with
-  `--enable-features=WebMCP`, or ChatGPT's in-app browser. Sable registers into
-  the browser's own context and its agent can call every tool. Nothing to set up.
-- **An extension supplies it.** The [MCP-B extension](https://docs.mcp-b.ai)
-  injects a `document.modelContext` of its own and relays the page's tools out
-  to a client such as Claude Desktop. Sable finds it already there and registers
-  into it. This is the easiest path on an ordinary Chrome.
+- **The browser implements WebMCP.** Chrome 149 or later, with
+  `chrome://flags/#enable-webmcp-testing` set to Enabled. Sable registers into
+  the browser's own context; DevTools grows a WebMCP panel listing the toolbox,
+  and the
+  [Model Context Tool Inspector](https://chromewebstore.google.com/detail/gbpdfapgefenggkahomfgkhfehlcenpd)
+  calls the tools by hand or through Gemini. This is the shortest path to seeing
+  it work, and needs no origin-trial token on localhost.
+- **An extension supplies it.** A bridge extension injects a
+  `document.modelContext` of its own and relays the page's tools over a
+  WebSocket to a local MCP server, which speaks stdio MCP to Claude Desktop or
+  Claude Code. Sable finds the context already there and registers into it. This
+  is the path that puts a real agent at the other end of the brush.
 - **Neither, so the polyfill.** `@mcp-b/webmcp-polyfill` gives the page the same
   API and **no transport at all**, and is explicit that browser transport
   belongs to the separate MCP-B runtime. The toolbox is real and wired to the

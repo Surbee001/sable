@@ -33,6 +33,7 @@ export function Toolbox() {
   return (
     <div className="tools">
       <Segmented
+        group
         value={ui.mode}
         onChange={(m) => studio.setMode(m)}
         options={[
@@ -41,13 +42,13 @@ export function Toolbox() {
         ]}
       />
 
-      <div className="brush-row">
+      <div className="brush-row tip-group">
         {(Object.keys(BRUSHES) as BrushKind[]).map((kind) => (
           <button
             key={kind}
             type="button"
             aria-label={BRUSHES[kind].label}
-            title={`${BRUSHES[kind].label}. ${BRUSHES[kind].hint}`}
+            data-tip={`${BRUSHES[kind].label}. ${BRUSHES[kind].hint}`}
             onClick={() => studio.setBrush({ kind })}
             className={`brush${brush.kind === kind ? ' brush--on' : ''}`}
           >
@@ -57,6 +58,7 @@ export function Toolbox() {
       </div>
 
       <Segmented
+        group
         value={brush.fill ? 'fill' : 'line'}
         onChange={(v) => studio.setBrush({ fill: v === 'fill' })}
         options={[
@@ -65,14 +67,20 @@ export function Toolbox() {
         ]}
       />
 
-      <div>
+      <div className="tip-group">
         <div className="swatch-grid">
           {PIGMENTS.map((p) => (
             <button
               key={p.id}
               type="button"
               aria-label={p.name}
-              title={`${p.name}. Granulation ${p.granulation}, staining ${p.staining}.`}
+              data-tip={`${p.name}. ${
+                p.granulation > 0.5
+                  ? 'Granulates into the paper.'
+                  : p.staining > 0.7
+                    ? 'Staining, holds a hard edge.'
+                    : 'Even in a wash.'
+              }`}
               onClick={() => studio.setBrush({ pigment: p.id })}
               className={`swatch pig-${p.id}${p.id === brush.pigment ? ' swatch--on' : ''}`}
             />

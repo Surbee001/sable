@@ -123,16 +123,14 @@ export function Timeline() {
       </div>
 
       <div className="timeline-read">
-        <span className="replay-count">
-          {replay === null ? `${total} marks` : `${at} of ${total}`}
-        </span>
         {current ? (
-          <span className={`replay-who replay-who--${current.author}`}>
-            {current.author === 'agent' ? 'Agent' : 'You'} · {describe(current)}
-          </span>
-        ) : (
-          <span className="replay-hint">Play it back, or click any mark</span>
-        )}
+          <>
+            <span className="replay-count">{`${at} of ${total}`}</span>
+            <span className={`replay-who replay-who--${current.author}`}>
+              {current.author === 'agent' ? 'Agent' : 'You'} · {describe(current)}
+            </span>
+          </>
+        ) : null}
       </div>
     </div>
   )

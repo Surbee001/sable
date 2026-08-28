@@ -20,7 +20,9 @@ export interface DuetStep {
   id: string
   by: Author
   title: string
-  /** Shown to the human, and given to the agent as the brief for its turn. */
+  /** One line for the human, on the panel. */
+  short: string
+  /** The full brief, handed to the agent when the turn is its own. */
   hint: string
   /** For a human pass, one guide per stroke, traced in order. */
   guides?: string[]
@@ -54,6 +56,7 @@ export const KAWA: DuetScore = {
   steps: [
     {
       id: 'sun',
+      short: 'A big pale sun, low and to the right.',
       by: 'agent',
       title: 'The sun',
       hint:
@@ -70,6 +73,7 @@ export const KAWA: DuetScore = {
     },
     {
       id: 'far-hills',
+      short: 'The distant range, weak and wet.',
       by: 'agent',
       title: 'The far hills',
       hint:
@@ -86,6 +90,7 @@ export const KAWA: DuetScore = {
     },
     {
       id: 'near-ridge',
+      short: 'One sweep of the flat brush, left to right.',
       by: 'human',
       title: 'The nearer ridge',
       hint:
@@ -102,6 +107,7 @@ export const KAWA: DuetScore = {
     },
     {
       id: 'water',
+      short: 'The river, flat and almost empty.',
       by: 'agent',
       title: 'The water',
       hint:
@@ -118,6 +124,7 @@ export const KAWA: DuetScore = {
     },
     {
       id: 'ripples',
+      short: 'Three lines across the water. Keep them broken.',
       by: 'human',
       title: 'Ripples',
       hint:
@@ -135,6 +142,7 @@ export const KAWA: DuetScore = {
     },
     {
       id: 'bank',
+      short: 'The near bank, warmer and heavier.',
       by: 'agent',
       title: 'The near bank',
       hint:
@@ -151,6 +159,7 @@ export const KAWA: DuetScore = {
     },
     {
       id: 'grass',
+      short: 'Three tufts. Flick upward, uneven.',
       by: 'human',
       title: 'Grass',
       hint:
@@ -168,6 +177,7 @@ export const KAWA: DuetScore = {
     },
     {
       id: 'trunk',
+      short: 'The trunk, one movement. Let it lean.',
       by: 'human',
       title: 'The pine',
       hint:
@@ -182,6 +192,7 @@ export const KAWA: DuetScore = {
     },
     {
       id: 'branches',
+      short: 'Three branches. Thin, and drooping at the ends.',
       by: 'human',
       title: 'Branches',
       hint:
@@ -199,6 +210,7 @@ export const KAWA: DuetScore = {
     },
     {
       id: 'foliage',
+      short: 'Needles, hung off the branches you drew.',
       by: 'agent',
       title: 'Pine foliage',
       hint:
@@ -227,6 +239,7 @@ export const KAWA: DuetScore = {
     },
     {
       id: 'rocks',
+      short: 'Rocks on the waterline, right.',
       by: 'agent',
       title: 'Rocks',
       hint:
@@ -249,6 +262,7 @@ export const KAWA: DuetScore = {
     },
     {
       id: 'birds',
+      short: 'Two birds. Small and far away.',
       by: 'human',
       title: 'Birds',
       hint:

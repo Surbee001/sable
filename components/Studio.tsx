@@ -121,7 +121,7 @@ export function Studio() {
         <header className="bar">
           <div className="pill pill--text">
             <span className="wordmark">Sable</span>
-            <span className="tagline">you and the agent both hold the brush</span>
+            <span className="tagline">one sheet, two painters</span>
           </div>
           <div className="pill">
             <Button icon onClick={() => studio.undo()} disabled={!canUndo} ariaLabel="Undo" title="Undo">
@@ -177,7 +177,7 @@ export function Studio() {
       <header className="bar">
         <div className="pill pill--text">
           <span className="wordmark">Sable</span>
-          <span className="tagline">you and the agent both hold the brush</span>
+          <span className="tagline">one sheet, two painters</span>
         </div>
 
         <span className="spacer" />

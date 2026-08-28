@@ -66,18 +66,22 @@ export function Segmented<T extends string>({
   options,
   value,
   onChange,
+  group,
 }: {
   options: Array<{ value: T; label: string; title?: string; Icon?: Icon }>
   value: T
   onChange: (v: T) => void
+  /** Anchor each option's tooltip to the row, so none of them can be clipped. */
+  group?: boolean
 }) {
   return (
-    <div className="seg">
+    <div className={`seg${group ? ' tip-group' : ''}`}>
       {options.map((o) => (
         <button
           key={o.value}
           type="button"
-          title={o.title}
+          data-tip={group ? o.title : undefined}
+          title={group ? undefined : o.title}
           onClick={() => onChange(o.value)}
           className={`seg-item${value === o.value ? ' seg-item--on' : ''}`}
         >

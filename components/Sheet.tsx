@@ -162,6 +162,32 @@ export function Sheet() {
       }
     }
 
+    // The agent's line, as far as it has got. Rendered every frame so the mark
+    // comes out from under its cursor rather than arriving complete once the
+    // cursor has stopped moving.
+    const live = presence.inProgress
+    if (live && live.points.length > 1) {
+      const stroke = current.strokes.find((s) => s.id === live.id)
+      if (stroke) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.scale(sx, sy)
+        renderStroke(
+          ctx,
+          {
+            ...stroke,
+            path: pointsToPath(live.points) + (live.fill ? ' Z' : ''),
+          },
+          {
+            wetness: layerOf.get(stroke.layerId)?.wetness ?? 0,
+            tooth,
+            settle: 0.5,
+          },
+          sx,
+          sy,
+        )
+      }
+    }
+
     // The mark in progress, painted for real rather than outlined. A dashed
     // line looks like a selection lasso, and watercolour never behaves the way
     // an outline suggests it will.
@@ -200,26 +226,41 @@ export function Sheet() {
     const step = () => {
       fxFrameRef.current = 0
       drawFx()
-      if (presence.settlingIds.length > 0 || drawingRef.current) {
+      if (presence.settlingIds.length > 0 || presence.inProgress || drawingRef.current) {
         fxFrameRef.current = requestAnimationFrame(step)
       }
     }
     fxFrameRef.current = requestAnimationFrame(step)
   }, [drawFx])
 
+  const pumpRef = useRef(pumpFx)
+  pumpRef.current = pumpFx
+
+  /**
+   * Subscribed once, with no dependencies, and deliberately so.
+   *
+   * Every pointer move updates presence, and presence used to wake React on
+   * each one. That re-created this effect, whose cleanup cancelled the frame
+   * that was about to paint the preview, so nothing appeared until the brush
+   * lifted. React only needs to hear about a mark finishing, which is rare;
+   * everything else is the animation loop's business.
+   */
   useEffect(() => {
+    let wasSettling = -1
     const stop = presence.subscribe(() => {
-      pumpFx()
-      // Only the completion of a wash needs React, and presence reports that
-      // once rather than on every frame.
-      tick((n) => n + 1)
+      pumpRef.current()
+      const settling = presence.settlingIds.length
+      if (settling !== wasSettling) {
+        wasSettling = settling
+        tick((n) => n + 1)
+      }
     })
-    pumpFx()
+    pumpRef.current()
     return () => {
       stop()
       if (fxFrameRef.current) cancelAnimationFrame(fxFrameRef.current)
     }
-  }, [pumpFx])
+  }, [])
 
   useEffect(() => {
     drawFx()
@@ -378,11 +419,18 @@ export function Sheet() {
     }
   }, [fit, size])
 
+  const cursorRef2 = useRef(drawCursors)
+  cursorRef2.current = drawCursors
+
   // Straight off presence, never through React, so the cursor lands in the same
   // task as the pointer event that moved it.
   useEffect(() => {
+    cursorRef2.current()
+    return presence.subscribe(() => cursorRef2.current())
+  }, [])
+
+  useEffect(() => {
     drawCursors()
-    return presence.subscribe(drawCursors)
   }, [drawCursors])
 
   /* ---------------- pointer ---------------- */

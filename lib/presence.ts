@@ -62,6 +62,8 @@ class Presence {
   /** Marks on the paper but still wetting in, against when they landed. */
   private settling = new Map<string, { at: number; duration: number }>()
   private settleFrame = 0
+  /** The mark currently being laid down, and how much of it exists so far. */
+  private drawing: { id: string; points: Point[]; fill: boolean } | null = null
   private running = false
   private listeners = new Set<() => void>()
   private failsafe: ReturnType<typeof setTimeout> | null = null
@@ -77,6 +79,18 @@ class Presence {
 
   cursor(who: Who): Cursor {
     return this.cursors[who]
+  }
+
+  /**
+   * The part of the agent's current mark that exists so far.
+   *
+   * A mark that appears whole the moment the cursor stops is not a mark being
+   * painted, it is a mark being pasted. The line has to come out from under the
+   * cursor as it travels, which means the view needs the traversed portion of
+   * the path, not just where the hand is.
+   */
+  get inProgress(): { id: string; points: Point[]; fill: boolean } | null {
+    return this.drawing
   }
 
   get agentBusy(): boolean {
@@ -161,6 +175,10 @@ class Presence {
       ...this.water,
       ...strokes.map((s) => [s.id, s.water] as const),
     ])
+    this.filled = new Map([
+      ...this.filled,
+      ...strokes.map((s) => [s.id, s.fill === true] as const),
+    ])
     if (strokes.length === 0) return
 
     for (const stroke of strokes) {
@@ -181,8 +199,10 @@ class Presence {
 
   /** Show everything immediately and stop animating. */
   private water = new Map<string, number>()
+  private filled = new Map<string, boolean>()
 
   flush(): void {
+    this.drawing = null
     const now = performance.now()
     for (const id of this.pending) {
       this.settling.set(id, { at: now, duration: settleFor(this.water.get(id) ?? 0.5) })
@@ -217,12 +237,22 @@ class Presence {
       const at = pointAt(item.points, t)
       this.cursors.agent = { x: at.x, y: at.y, painting: true, visible: true }
 
+      // Hand the view the line so far, so the mark comes out from under the
+      // cursor instead of arriving once the cursor has stopped.
+      this.drawing = {
+        id: item.id,
+        points: walked(item.points, t),
+        fill: this.filled.get(item.id) === true,
+      }
+
       if (t >= 1) {
+        this.drawing = null
         this.pending.delete(item.id)
         this.beginSettle([{ id: item.id, water: this.water.get(item.id) ?? 0.5 }])
         item = this.queue.shift()
         if (!item) {
           this.running = false
+          this.drawing = null
           // Let the hand rest a moment where it finished, then lift away.
           setTimeout(() => {
             if (!this.running) {
@@ -252,6 +282,29 @@ function pathLengthOf(pts: Point[]): number {
     total += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y)
   }
   return total
+}
+
+/** The part of a polyline already travelled, at fraction t. */
+function walked(pts: Point[], t: number): Point[] {
+  if (pts.length < 2 || t <= 0) return pts.slice(0, 1)
+  if (t >= 1) return pts
+  const target = pathLengthOf(pts) * t
+  const out: Point[] = [pts[0]]
+  let gone = 0
+  for (let i = 1; i < pts.length; i++) {
+    const seg = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y)
+    if (gone + seg >= target) {
+      const f = seg === 0 ? 0 : (target - gone) / seg
+      out.push({
+        x: pts[i - 1].x + (pts[i].x - pts[i - 1].x) * f,
+        y: pts[i - 1].y + (pts[i].y - pts[i - 1].y) * f,
+      })
+      return out
+    }
+    out.push(pts[i])
+    gone += seg
+  }
+  return out
 }
 
 /** Position a fraction of the way along a polyline. */

@@ -20,19 +20,14 @@ export function Duet() {
     return (
       <>
         <p className="note note--lead">
-          A landscape in the old manner, painted in twelve passes that alternate between you and
-          the agent. It lays the ground, you trace the ridge. It floods the river, you break it
-          with ripples. You draw the pine, it hangs the foliage off the branches you actually
-          made.
+          A landscape in twelve passes, taken in turns. It lays the ground, you trace the ridge.
+          You draw the pine, it hangs the foliage off your branches.
         </p>
         <Button solid onClick={() => studio.startDuet(KAWA)}>
           <Play size={12} weight="fill" />
           Begin {KAWA.title}
         </Button>
-        <p className="note">
-          Starts a fresh sheet. Turns hand over by themselves: a connected agent takes its passes
-          through the duet tools, and if nothing answers, the studio paints them.
-        </p>
+        <p className="note">Fresh sheet. Turns hand over by themselves.</p>
       </>
     )
   }
@@ -64,12 +59,11 @@ export function Duet() {
             {step.by === 'agent' ? 'The agent&rsquo;s turn' : 'Your turn'}
           </span>
           <span className="turn-title">{step.title}</span>
-          <p className="turn-hint">{step.hint}</p>
+          <p className="turn-hint">{step.short}</p>
 
           {step.by === 'human' && step.guides ? (
             <p className="note">
-              Trace the marked line. {traced} of {step.guides.length} done. What lands on the
-              paper is your line, not the guide.
+              {traced} of {step.guides.length} traced. The mark is your line, not the guide.
             </p>
           ) : null}
 
