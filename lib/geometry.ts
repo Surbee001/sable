@@ -152,6 +152,80 @@ export function decimate(pts: Point[], min = 3): Point[] {
   return out
 }
 
+/**
+ * Walk a polyline and drop a sample every `step` units of arc length.
+ *
+ * `decimate` keeps whichever of the original points happen to fall far enough
+ * apart, so its vertices land wherever the input sampling left them rather than
+ * where the curve needs them. On a long stroke that is what puts flat facets
+ * and sudden corners into a line the hand drew smoothly: the retained points
+ * alias the curve instead of describing it. Walking at a fixed step puts every
+ * vertex exactly where it belongs, whatever the input rate was.
+ */
+export function resample(pts: Point[], step: number): Point[] {
+  if (pts.length < 2 || !(step > 0)) return pts
+  const out: Point[] = [pts[0]]
+  // Distance covered since the last sample was emitted.
+  let carried = 0
+
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1]
+    const b = pts[i]
+    const seg = Math.hypot(b.x - a.x, b.y - a.y)
+    if (seg < 1e-9) continue
+
+    let at = 0
+    while (carried + (seg - at) >= step) {
+      at += step - carried
+      const u = at / seg
+      out.push({ x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u })
+      carried = 0
+    }
+    carried += seg - at
+  }
+
+  // Always finish on the real end of the line, unless we are practically
+  // standing on it already: a stroke that stops short of where the brush lifted
+  // is worse than one with a slightly short last segment.
+  const tail = pts[pts.length - 1]
+  const last = out[out.length - 1]
+  if (out.length < 2 || Math.hypot(tail.x - last.x, tail.y - last.y) > step * 0.25) {
+    out.push(tail)
+  }
+  return out
+}
+
+/**
+ * Mild Laplacian smoothing, with the ends pinned.
+ *
+ * A brush has a physical width and cannot pivot on a point, so a centreline
+ * with a hard corner in it describes something no brush could do. Nudging each
+ * sample a fraction of the way towards the midpoint of its neighbours rounds
+ * those corners at the scale of the sampling, which is exactly the scale the
+ * faceting lives at, and leaves the overall shape where the hand put it.
+ */
+export function smoothPolyline(pts: Point[], strength = 0.5, passes = 1): Point[] {
+  if (pts.length < 3 || passes < 1 || strength <= 0) return pts
+  let current = pts
+  for (let pass = 0; pass < passes; pass++) {
+    const n = current.length
+    const next: Point[] = new Array(n)
+    next[0] = current[0]
+    next[n - 1] = current[n - 1]
+    for (let i = 1; i < n - 1; i++) {
+      const a = current[i - 1]
+      const b = current[i]
+      const c = current[i + 1]
+      next[i] = {
+        x: b.x + ((a.x + c.x) / 2 - b.x) * strength,
+        y: b.y + ((a.y + c.y) / 2 - b.y) * strength,
+      }
+    }
+    current = next
+  }
+  return current
+}
+
 /* ------------------------------------------------------------------ *
  * Brush body
  * ------------------------------------------------------------------ */

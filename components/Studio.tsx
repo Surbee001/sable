@@ -17,6 +17,7 @@ import { useMediaQuery } from '@/lib/useMediaQuery'
 import { useStudio } from '@/lib/useStudio'
 import { toolSurface } from '@/lib/webmcp'
 import { Activity } from './Activity'
+import { AgentNotice } from './AgentNotice'
 import { AgentPanel } from './AgentPanel'
 import { Duet } from './Duet'
 import { Inspector } from './Inspector'
@@ -101,6 +102,7 @@ export function Studio() {
   if (!ready) {
     return (
       <div className="studio">
+        <AgentNotice />
         <header className="bar">
           <div className="pill pill--text">
             <span className="wordmark">Sable</span>
@@ -136,6 +138,7 @@ export function Studio() {
     const ids = tabsFor(['mark', 'duet', 'tools', 'agent', 'layers', 'log'] as const)
     return (
       <div className={`studio${chromeHidden ? ' studio--bare' : ''}`}>
+        <AgentNotice />
         <Welcome />
 
         <header className="bar">
@@ -191,6 +194,7 @@ export function Studio() {
 
   return (
     <div className={`studio${chromeHidden ? ' studio--bare' : ''}`}>
+      <AgentNotice />
       <Welcome />
 
       <header className="bar">

@@ -57,6 +57,30 @@ and relays whatever the page registers out to an MCP client over stdio. Sable
 finds the context already there and registers into it, and the panel will say
 **Connected through an extension**.
 
+## If your agent drives browsers rather than speaking WebMCP
+
+Some agents have browser automation and no WebMCP bridge. They read the DOM and
+click things, which cannot work here: a mark is a drag across a canvas, so
+toolbar buttons load the brush and nothing else. Watching one try is what
+prompted the note the page now carries in its own DOM.
+
+Such an agent can still reach every tool, because it can evaluate JavaScript:
+
+```js
+const ctx = document.modelContext
+const tools = await ctx.getTools()
+const call = async (name, args) =>
+  JSON.parse(await ctx.executeTool(tools.find((t) => t.name === name), JSON.stringify(args)))
+
+await call('assess_painting', {})
+await call('paint', { strokes: [
+  { path: 'M 200 240 C 320 140 520 300 720 200', pigment: 'indigo', water: 0.5, opacity: 0.6 },
+]})
+```
+
+If it clicked around the toolbar and reported that it had finished while almost
+nothing appeared, this is why, and this is the fix.
+
 ## The self check, no agent required
 
 Open the page, open DevTools, paste in the contents of
