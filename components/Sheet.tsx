@@ -38,7 +38,7 @@ function themeInk(): { accent: string; agent: string; guide: string } {
 }
 
 export function Sheet() {
-  const { scene, ui, duet } = useStudio()
+  const { scene, ui, duet, replay } = useStudio()
   const wrapRef = useRef<HTMLDivElement>(null)
   const mainRef = useRef<HTMLCanvasElement>(null)
   const fxRef = useRef<HTMLCanvasElement>(null)
@@ -97,7 +97,10 @@ export function Sheet() {
     if (!ctx) return
     if (resized) paintedRef.current = null
 
-    const order = paintOrder(scene).filter((s) => presence.isSettled(s.id))
+    const full = paintOrder(scene)
+    const order = (replay === null ? full : full.slice(0, replay)).filter((s) =>
+      presence.isSettled(s.id),
+    )
     const prev = paintedRef.current
 
     const isAppend =

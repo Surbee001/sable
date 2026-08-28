@@ -1,6 +1,6 @@
 'use client'
 
-import { CheckCircle, Circle, PaintBrush, Play } from '@phosphor-icons/react'
+import { CheckCircle, Circle, Play } from '@phosphor-icons/react'
 import { KAWA } from '@/lib/duet'
 import { studio } from '@/lib/store'
 import { useStudio } from '@/lib/useStudio'
@@ -30,8 +30,8 @@ export function Duet() {
           Begin {KAWA.title}
         </Button>
         <p className="note">
-          Starts a fresh sheet. An agent takes its turns through the duet tools; press the button
-          on its passes if there is nobody connected.
+          Starts a fresh sheet. Turns hand over by themselves: a connected agent takes its passes
+          through the duet tools, and if nothing answers, the studio paints them.
         </p>
       </>
     )
@@ -74,10 +74,10 @@ export function Duet() {
           ) : null}
 
           {step.by === 'agent' ? (
-            <Button solid onClick={() => studio.playAgentStep()}>
-              <PaintBrush size={12} weight="bold" />
-              Let the agent take this turn
-            </Button>
+            <span className="waiting">
+              <span className="working-pip" />
+              Handing over
+            </span>
           ) : null}
         </div>
       )}

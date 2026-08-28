@@ -85,7 +85,8 @@ in `lib/webmcp.ts`.
 
 | Tool | What it does |
 | --- | --- |
-| `look_at_canvas` | Returns **an image of the sheet** plus a written summary |
+| `assess_painting` | **Measures** the sheet and says what it needs next |
+| `look_at_canvas` | Returns an image of the sheet plus a written summary |
 | `inspect_region` | Returns an enlarged crop, for judging one passage closely |
 | `read_painting` | Every stroke as structured data: id, pigment, water, bounds, path |
 | `paint` | Lays down one or many marks, and returns an image of the result |
@@ -96,7 +97,7 @@ in `lib/webmcp.ts`.
 | `manage_layers` | Adds layers, sets wetness and visibility |
 | `set_sheet` | Changes the paper or retitles the study |
 
-### Two things worth looking at
+### Three things worth looking at
 
 **1. The tools return pictures.** A tool result that only says `{ ok: true }`
 leaves the agent painting blind. It has to imagine the consequence of its own
@@ -106,7 +107,19 @@ not quite specify. `paint`, `revise_stroke`, `transform_strokes`,
 the agent can look at what it did, judge it, and correct it. That loop is the
 difference between an agent that fires off strokes and one that paints.
 
-**2. The toolbox is a live description of what is possible.** Watch the Agent
+**2. The agent works out what to do, rather than being told.** There is no
+prompt box on this page. `assess_painting` measures the document instead: how
+many pigments are in play, whether there is a genuine dark anywhere, how far the
+values actually spread, which ninths of the sheet are untouched, and how the
+soft edges balance against the crisp ones. Then it says what follows.
+
+The failure mode of painting without measuring is always the same, whoever is
+holding the brush: a new hue for every shape, nothing properly dark, every edge
+equally soft, and a picture that goes flat. Those are not lapses of taste. They
+are lapses of measurement, and every one of them is visible in the document, so
+the page can just compute them and hand them over.
+
+**3. The toolbox is a live description of what is possible.** Watch the Agent
 tab while the agent works: a tool lights up while it is being called, and leaves
 a fading trail of what was used just before. The set of
 registered tools is not a fixed manifest. It is rebuilt, firing `toolchange`,
@@ -167,10 +180,35 @@ While a score is running, two more tools exist:
 | `duet_complete_turn` | Hands the brush back. Registered only when it is actually the agent's turn |
 
 `duet_complete_turn`'s description **is** the brief for the current pass, so the
-agent's instructions change every time the turn comes back to it. The passes are
-described rather than dictated: the agent paints with the ordinary `paint` tool
-and then hands back. A button in the panel paints a reference version of its
-turn, so the score can still be seen through when nothing is connected.
+agent's instructions change every time the turn comes back to it.
+
+### Turns hand over by themselves
+
+There is no button to make the agent go. A duet with a button on the agent's
+passes is not a duet, it is a slideshow the human advances.
+
+So the turn simply happens: when the score comes round to the agent, the studio
+pauses for a beat and then paints it. Unless a real agent is already working, in
+which case the studio keeps out of the way. It can tell the difference because
+tool calls are counted, and counted in two kinds: a call that changes the
+painting means something out there has taken the turn, and a call that only
+looks at it means something is still thinking. Looking buys a few more seconds.
+Painting buys a minute.
+
+That is the whole handover protocol, and it needs no coordination between the
+two of them, because the tool surface is already the thing they share.
+
+## Winding it back
+
+The scrubber under the sheet replays the painting mark by mark, and the track is
+one tick per mark coloured by who made it, so the shape of the collaboration is
+legible before you play anything.
+
+This is only possible because the sheet is a list of marks rather than a picture
+of them. There is nothing to reconstruct: winding back just means drawing fewer
+of them. A flattened image cannot be asked what it looked like ten minutes ago,
+and that difference is the entire argument of the project, so it is worth being
+able to see.
 
 ## Try it
 
@@ -185,6 +223,7 @@ agent and partly by hand, as the log shows.
 - Open the **Duet** tab and start *Evening river* to paint one landscape in
   turns.
 - Then ask the agent something like:
+  - *"Assess the painting and do whatever it needs most."*
   - *"Look at the canvas. What would you add?"*
   - *"The top petal is too cold. Warm it and make it bleed more."*
   - *"Paint a second flower behind this one, smaller and paler so it sits back."*
@@ -218,6 +257,8 @@ lib/
   webmcp.ts         the tool surface, core and contextual
   snapshot.ts       offscreen rendering, so tools can return images
   hit.ts            click testing
+  assess.ts         what the picture needs next, measured rather than guessed
+  conductor.ts      whose turn it is, without anyone pressing anything
   seed.ts           the study on the sheet when you arrive
   duet.ts           the score for a painting made in turns
   presence.ts       cursors, and when a mark appears rather than when it exists

@@ -1,15 +1,7 @@
 'use client'
 
-import {
-  Eye,
-  Lightning,
-  NotePencil,
-  PaintBrush,
-  Palette,
-} from '@phosphor-icons/react'
+import { Eye, Lightning, PaintBrush, Palette } from '@phosphor-icons/react'
 import { useEffect, useRef, useState } from 'react'
-import { studio } from '@/lib/store'
-import { useStudio } from '@/lib/useStudio'
 import { toolSurface, type SurfaceStatus } from '@/lib/webmcp'
 
 /**
@@ -27,7 +19,13 @@ const GROUPS: Array<{
     id: 'look',
     label: 'Looking',
     Icon: Eye,
-    tools: ['look_at_canvas', 'inspect_region', 'read_painting', 'describe_selection'],
+    tools: [
+      'assess_painting',
+      'look_at_canvas',
+      'inspect_region',
+      'read_painting',
+      'describe_selection',
+    ],
   },
   {
     id: 'paint',
@@ -45,7 +43,7 @@ const GROUPS: Array<{
     id: 'state',
     label: 'Only right now',
     Icon: Lightning,
-    tools: ['read_brief', 'undo', 'redo', 'clear_sheet'],
+    tools: ['duet_status', 'duet_complete_turn', 'undo', 'redo', 'clear_sheet'],
   },
 ]
 
@@ -53,7 +51,8 @@ const GROUPS: Array<{
 const CONTEXTUAL = new Set([
   'describe_selection',
   'revise_selection',
-  'read_brief',
+  'duet_status',
+  'duet_complete_turn',
   'undo',
   'redo',
   'clear_sheet',
@@ -66,10 +65,11 @@ const EMPTY: SurfaceStatus = {
   activeTool: null,
   recentTools: [],
   callCount: 0,
+  mutationCount: 0,
+  lastCallAt: 0,
 }
 
 export function AgentPanel() {
-  const { brief } = useStudio()
   const [status, setStatus] = useState<SurfaceStatus>(EMPTY)
   const [appeared, setAppeared] = useState<string[]>([])
   const previous = useRef<string[]>([])
@@ -155,58 +155,6 @@ export function AgentPanel() {
           : 'The toolbox is live. Select a mark and tools for revising it appear here.'}
         {status.callCount > 0 ? ` ${status.callCount} calls so far.` : ''}
       </p>
-
-      <Brief value={brief} />
     </>
-  )
-}
-
-/**
- * Standing direction for the agent.
- *
- * Not a prompt box: nothing is sent anywhere and nothing happens when you type.
- * It is the note pinned to the board, and the agent reads it through a tool
- * that only exists while there is something written on it.
- */
-function Brief({ value }: { value: string }) {
-  const [draft, setDraft] = useState(value)
-  const mine = useRef(false)
-
-  // Every keystroke would otherwise rebuild the tool surface, since the brief
-  // is quoted inside the tool's own description.
-  useEffect(() => {
-    if (draft === value) return
-    mine.current = true
-    const timer = setTimeout(() => studio.setBrief(draft.trim()), 400)
-    return () => clearTimeout(timer)
-  }, [draft, value])
-
-  useEffect(() => {
-    if (mine.current) {
-      mine.current = false
-      return
-    }
-    setDraft(value)
-  }, [value])
-
-  return (
-    <div className="brief">
-      <span className="group-head">
-        <NotePencil size={11} weight="bold" />
-        Brief
-      </span>
-      <textarea
-        className="brief-input"
-        rows={3}
-        value={draft}
-        placeholder="Leave the agent standing direction. Try: keep it loose and high key, three pigments only, leave the top left empty."
-        onChange={(e) => setDraft(e.target.value)}
-      />
-      <p className="note">
-        {value
-          ? 'Pinned. The agent can read this through read_brief before it paints.'
-          : 'Nothing pinned. Write something and a read_brief tool appears in the toolbox.'}
-      </p>
-    </div>
   )
 }

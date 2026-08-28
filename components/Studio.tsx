@@ -10,6 +10,7 @@ import {
   Sun,
 } from '@phosphor-icons/react'
 import { useEffect, useState } from 'react'
+import { conductor } from '@/lib/conductor'
 import { exportPng } from '@/lib/snapshot'
 import { studio } from '@/lib/store'
 import { applyTheme, currentTheme, type Theme } from '@/lib/theme'
@@ -20,6 +21,7 @@ import { AgentPanel } from './AgentPanel'
 import { Duet } from './Duet'
 import { Inspector } from './Inspector'
 import { Layers } from './Layers'
+import { Replay } from './Replay'
 import { Sheet } from './Sheet'
 import { Toolbox } from './Toolbox'
 import { Welcome } from './Welcome'
@@ -38,6 +40,9 @@ export function Studio() {
   const [openTab, setOpenTab] = useState<Tab | null>(null)
 
   useEffect(() => setTheme(currentTheme()), [])
+
+  // Turns hand over on their own, whichever panel happens to be open.
+  useEffect(() => conductor.start(), [])
 
   // Selecting a mark is a request to look at it, so the panel follows. Letting
   // go of it falls back rather than leaving an empty tab selected. On a narrow
@@ -130,6 +135,7 @@ export function Studio() {
         <div className="stage">
           <div className="stage-inner">
             <Sheet />
+            <Replay />
           </div>
         </div>
 
@@ -231,6 +237,7 @@ export function Studio() {
       <div className="stage">
         <div className="stage-inner">
           <Sheet />
+          <Replay />
         </div>
       </div>
 

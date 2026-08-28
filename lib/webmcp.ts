@@ -1,6 +1,7 @@
 import { initializeWebMCPPolyfill } from '@mcp-b/webmcp-polyfill'
 import { isValidPath, scalePath } from './geometry'
 import { PIGMENTS, SCHEMES, findScheme, getPigment, resolvePigment } from './palette'
+import { assess } from './assess'
 import { describeScene, narrateScene, snapshotRegion, snapshotScene, summariseStroke } from './snapshot'
 import { studio, type PaintInput, type StrokePatch } from './store'
 import { BRUSHES, CANVAS_H, CANVAS_W, PAPERS, type BrushKind, type PaperKind } from './types'
@@ -192,6 +193,7 @@ function coreTools(): ToolDef[] {
       description:
         'Look at the painting. Returns an image of the sheet as it currently stands, plus a written summary. ' +
         'Call this before your first mark to see what the human has already done, and again after every pass. ' +
+        'Pair it with assess_painting, which measures what you are looking at. ' +
         'watercolour behaves differently from how it reads in code, and you cannot judge a wash you have not seen.',
       annotations: { readOnlyHint: true },
       inputSchema: {
@@ -207,13 +209,8 @@ function coreTools(): ToolDef[] {
         const scene = studio.getScene()
         const width = Math.max(240, Math.min(1400, num(input?.width, 760) > 1 ? Number(input?.width) || 760 : 760))
         const image = snapshotScene(scene, { width })
-        const brief = studio.getBrief().trim()
-        const text = brief
-          ? `${narrateScene(scene)}\n\nThe human has left a brief pinned to the board: "${brief}"`
-          : narrateScene(scene)
-        return show(text, image, {
+        return show(narrateScene(scene), image, {
           canvas: { width: CANVAS_W, height: CANVAS_H },
-          brief: brief || undefined,
         })
       },
     },
@@ -292,6 +289,34 @@ function coreTools(): ToolDef[] {
           `${strokes.length} stroke${strokes.length === 1 ? '' : 's'} on "${described.title}".`,
           { ...described, strokes },
         )
+      },
+    },
+
+    {
+      name: 'assess_painting',
+      description:
+        'Work out what the picture needs next. Call this before every pass, including your ' +
+        'first, and again after you have painted.\n\n' +
+        'It measures the sheet rather than describing it: how many pigments are in play, ' +
+        'whether there is a genuine dark anywhere, how far the values actually spread, which ' +
+        'ninths of the sheet are still untouched, and how the soft edges balance against the ' +
+        'crisp ones. Then it tells you what follows from those numbers.\n\n' +
+        'This exists because the failure mode of painting without measuring is always the ' +
+        'same: a new hue for every shape, nothing properly dark, every edge equally soft, and ' +
+        'a picture that goes flat. Those are not lapses of taste, they are lapses of ' +
+        'measurement, and they are all visible in the document.',
+      annotations: { readOnlyHint: true },
+      inputSchema: { type: 'object', properties: {} },
+      execute: () => {
+        const scene = studio.getScene()
+        const report = assess(scene)
+        const text = [
+          report.observations.join(' '),
+          '',
+          report.suggestions.length === 1 ? 'What it needs:' : 'What it needs, in order:',
+          ...report.suggestions.map((line, i) => `${i + 1}. ${line}`),
+        ].join('\n')
+        return show(text, snapshotScene(scene, { width: 760 }), report as unknown as Record<string, unknown>)
       },
     },
 
@@ -907,21 +932,6 @@ function contextualTools(): ToolDef[] {
     }
   }
 
-  const brief = studio.getBrief().trim()
-  if (brief) {
-    tools.push({
-      name: 'read_brief',
-      description:
-        'The human has pinned a brief to the board, and this returns it. It is standing ' +
-        'direction rather than an instruction to act on immediately: read it before deciding ' +
-        'what to paint next, and keep to it. It currently reads: ' +
-        `"${brief.length > 220 ? `${brief.slice(0, 217)}...` : brief}"`,
-      annotations: { readOnlyHint: true },
-      inputSchema: { type: 'object', properties: {} },
-      execute: () => say(brief, { brief }),
-    })
-  }
-
   if (canUndo) {
     tools.push({
       name: 'undo',
@@ -997,23 +1007,42 @@ function surfaceKey(): string {
     scene.strokes.length > 0 ? 'has' : 'empty',
     canUndo ? 'u' : '-',
     canRedo ? 'r' : '-',
-    // The brief is quoted inside read_brief's description, so changing it
-    // genuinely changes the surface and has to re-register.
-    studio.getBrief().trim(),
     // Each pass of a duet carries its own brief inside the tool description.
     studio.getDuet() ? `duet:${studio.getDuet()?.index}` : '-',
   ].join('|')
 }
 
+/**
+ * How the tools registered on this page can actually be reached.
+ *
+ * The distinction matters more than it looks. Registering a tool and being
+ * connectable are separate things: the polyfill installs `document.modelContext`
+ * and nothing else. It carries no transport at all, so in `local` the whole
+ * toolbox is real, wired to the store, and unreachable by anything outside the
+ * page. Reporting that as a connection is the one thing the panel must not do.
+ *
+ * - `native`  the browser implements WebMCP itself, and its agent can see the tools
+ * - `bridge`  an extension supplied the context and relays to an outside client
+ * - `local`   our polyfill, in-page only, no agent can connect
+ * - `none`    no `document.modelContext` at all, not even the polyfill took
+ */
+export type SurfaceTransport = 'native' | 'bridge' | 'local' | 'none'
+
 export interface SurfaceStatus {
   supported: boolean
-  native: boolean
+  transport: SurfaceTransport
+  /** Whether an agent outside the page can actually call these tools. */
+  reachable: boolean
   toolNames: string[]
   /** The tool the agent is inside at this moment, if any. */
   activeTool: string | null
   /** Tools called in the last few seconds, most recent first. */
   recentTools: string[]
   callCount: number
+  /** Calls that changed the painting, as opposed to only looking at it. */
+  mutationCount: number
+  /** When the last call of any kind came in. */
+  lastCallAt: number
   error?: string
 }
 
@@ -1024,12 +1053,14 @@ class ToolSurface {
   private contextual: AbortController | null = null
   private key = ''
   private mounted = false
-  private native = false
+  private transport: SurfaceTransport = 'none'
   private listeners = new Set<StatusListener>()
   private names: string[] = []
   private active: string | null = null
   private recent: string[] = []
   private calls = 0
+  private mutations = 0
+  private lastCallAt = 0
   private cooldown: ReturnType<typeof setTimeout> | null = null
   private hold: ReturnType<typeof setTimeout> | null = null
   private error?: string
@@ -1045,11 +1076,14 @@ class ToolSurface {
   status(): SurfaceStatus {
     return {
       supported: this.mounted,
-      native: this.native,
+      transport: this.transport,
+      reachable: this.transport === 'native' || this.transport === 'bridge',
       toolNames: this.names,
       activeTool: this.active,
       recentTools: this.recent,
       callCount: this.calls,
+      mutationCount: this.mutations,
+      lastCallAt: this.lastCallAt,
       error: this.error,
     }
   }
@@ -1080,6 +1114,11 @@ class ToolSurface {
         const startedAt = Date.now()
         this.active = tool.name
         this.calls += 1
+        this.lastCallAt = startedAt
+        // Looking at the sheet is not the same as working on it, and the
+        // difference decides whether the studio waits for a live agent or
+        // assumes nothing is listening.
+        if (!tool.annotations?.readOnlyHint) this.mutations += 1
         this.emit()
 
         const settle = () => {
@@ -1114,20 +1153,32 @@ class ToolSurface {
     if (this.mounted) return
     if (typeof document === 'undefined') return
 
-    // Native WebMCP where the browser has it; the polyfill everywhere else, so
-    // the same page works in Chrome behind the flag, in ChatGPT's browser, and
-    // for anyone who just opens the link.
-    this.native = 'modelContext' in document && Boolean(document.modelContext)
-    if (!this.native) {
+    // Whoever put `document.modelContext` there before we did owns a way out of
+    // the page: the browser's own implementation, or an extension relaying to a
+    // client outside it. Either way an agent can reach the tools. If nobody did,
+    // the polyfill gives us the same API with no transport behind it, and the
+    // page still works for the person sitting at it.
+    const provided = 'modelContext' in document && Boolean(document.modelContext)
+    if (provided) {
+      // MCP-B runtimes add a non-standard `listTools()` to the context they
+      // inject; the browser's own implementation has only the spec surface.
+      // A guess either way still lands on a reachable transport, so the worst
+      // case is the wrong label on a working connection, never a false one.
+      const extras = document.modelContext as { listTools?: unknown }
+      this.transport = typeof extras.listTools === 'function' ? 'bridge' : 'native'
+    } else {
       try {
         initializeWebMCPPolyfill()
+        this.transport = document.modelContext ? 'local' : 'none'
       } catch (err) {
+        this.transport = 'none'
         this.error = err instanceof Error ? err.message : String(err)
       }
     }
 
     const context = document.modelContext
     if (!context) {
+      this.transport = 'none'
       this.error ??= 'This browser does not expose document.modelContext.'
       this.emit()
       return

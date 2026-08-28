@@ -79,9 +79,10 @@ export interface DuetState {
 
 export interface StudioSnapshot {
   scene: Scene
+  /** How many marks of the history to show, or null for the finished sheet. */
+  replay: number | null
   ui: UiState
   activity: Activity[]
-  brief: string
   duet: DuetState | null
   canUndo: boolean
   canRedo: boolean
@@ -156,8 +157,8 @@ class Studio {
     recentAgent: [],
   }
   private activity: Activity[] = []
-  private brief = ''
   private duet: DuetState | null = null
+  private replay: number | null = null
   private past: Scene[] = []
   private future: Scene[] = []
   private listeners = new Set<() => void>()
@@ -175,9 +176,9 @@ class Studio {
   private build(): StudioSnapshot {
     return {
       scene: this.scene,
+      replay: this.replay,
       ui: this.ui,
       activity: this.activity,
-      brief: this.brief,
       duet: this.duet,
       canUndo: this.past.length > 0,
       canRedo: this.future.length > 0,
@@ -237,6 +238,7 @@ class Studio {
   /* -------------------- painting -------------------- */
 
   paint(input: PaintInput, author: Author): Stroke {
+    this.replay = null
     const layer =
       this.resolveLayer(input.layerId) ??
       this.getLayer(this.ui.activeLayerId) ??
@@ -278,6 +280,7 @@ class Studio {
   /** Paint several strokes as one undoable action, the way an agent lays in a pass. */
   paintMany(inputs: PaintInput[], author: Author, summary?: string): Stroke[] {
     if (inputs.length === 0) return []
+    this.replay = null
     this.checkpoint()
 
     const made: Stroke[] = []
@@ -564,6 +567,20 @@ class Studio {
     this.emit()
   }
 
+  /* -------------------- replay -------------------- */
+
+  /**
+   * Wind the painting back.
+   *
+   * Only possible because the sheet is a list of marks rather than a picture of
+   * them: there is nothing to reconstruct, just fewer of them to draw. A bitmap
+   * cannot be asked what it looked like an hour ago.
+   */
+  setReplay(at: number | null): void {
+    this.replay = at
+    this.emit()
+  }
+
   /* -------------------- the duet -------------------- */
 
   getDuet = (): DuetState | null => this.duet
@@ -650,21 +667,6 @@ class Studio {
   /** A line from the agent addressed to the human, with no mark attached. */
   noteFromAgent(note: string): void {
     this.log('agent', 'note', note)
-    this.emit()
-  }
-
-  getBrief = (): string => this.brief
-
-  /**
-   * Standing direction for whoever else is painting.
-   *
-   * Not a prompt: it does not make anything happen. It is the note a painter
-   * leaves pinned to the board, and the agent reads it before deciding what to
-   * do next.
-   */
-  setBrief(brief: string): void {
-    if (brief === this.brief) return
-    this.brief = brief
     this.emit()
   }
 
