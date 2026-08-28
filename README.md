@@ -261,7 +261,7 @@ three ways that happens, and the Agent tab tells you which one you are in.
   to a client such as Claude Desktop. Sable finds it already there and registers
   into it. This is the easiest path on an ordinary Chrome.
 - **Neither, so the polyfill.** `@mcp-b/webmcp-polyfill` gives the page the same
-  API and **no transport at all** — it is explicit that browser transport
+  API and **no transport at all**, and is explicit that browser transport
   belongs to the separate MCP-B runtime. The toolbox is real and wired to the
   document, the studio works, and nothing outside the page can call it. The
   panel says so rather than showing a live connection, because the failure it
