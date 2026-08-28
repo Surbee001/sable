@@ -634,6 +634,13 @@ export function Sheet() {
         <canvas ref={uiRef} className="sheet-layer" />
         <canvas
           ref={cursorRef}
+          role="application"
+          aria-label={
+            ui.mode === 'paint'
+              ? 'Painting surface, 1000 by 700 units. Press and drag across it to lay a mark ' +
+                'with the loaded brush. Clicking without dragging does nothing.'
+              : 'Painting surface, 1000 by 700 units. Click a mark to select it, drag to move it.'
+          }
           className="sheet-layer sheet-layer--interactive"
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}

@@ -82,6 +82,7 @@ export function Segmented<T extends string>({
           type="button"
           data-tip={group ? o.title : undefined}
           title={group ? undefined : o.title}
+          aria-pressed={value === o.value}
           onClick={() => onChange(o.value)}
           className={`seg-item${value === o.value ? ' seg-item--on' : ''}`}
         >

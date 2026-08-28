@@ -45,7 +45,7 @@ export function Studio() {
    */
   const [ready, setReady] = useState(false)
   useEffect(() => setReady(true), [])
-  const narrow = useMediaQuery('(max-width: 1120px)')
+  const narrow = useMediaQuery('(max-width: 880px)')
   const [openTab, setOpenTab] = useState<Tab | null>(null)
 
   useEffect(() => setTheme(currentTheme()), [])

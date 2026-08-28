@@ -47,7 +47,8 @@ export function Toolbox() {
           <button
             key={kind}
             type="button"
-            aria-label={BRUSHES[kind].label}
+            aria-label={`${BRUSHES[kind].label} brush`}
+            aria-pressed={brush.kind === kind}
             data-tip={`${BRUSHES[kind].label}. ${BRUSHES[kind].hint}`}
             onClick={() => studio.setBrush({ kind })}
             className={`brush${brush.kind === kind ? ' brush--on' : ''}`}
@@ -73,7 +74,8 @@ export function Toolbox() {
             <button
               key={p.id}
               type="button"
-              aria-label={p.name}
+              aria-label={`Paint with ${p.name}`}
+              aria-pressed={p.id === brush.pigment}
               data-tip={`${p.name}. ${
                 p.granulation > 0.5
                   ? 'Granulates into the paper.'

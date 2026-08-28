@@ -1,43 +1,34 @@
 /**
- * A note for whoever is driving this page who is not a person.
+ * A short description of how the page is operated.
  *
- * An agent with browser automation but no WebMCP bridge reads the DOM and
- * clicks things, which cannot work here: painting is a drag across a canvas,
- * and no amount of pressing toolbar buttons produces a mark. Watching one try
- * is what prompted this. It had the whole toolbox available on
- * document.modelContext the entire time and no way to find out.
+ * Written because an agent driving the DOM clicked its way round the toolbar,
+ * announced that it had finished painting, and had made one mark. Nothing was
+ * broken: it had simply never been told that a mark is a drag, so it pressed
+ * buttons and expected paint.
  *
- * So the page says so, in the document, where anything reading the DOM will
- * see it. Hidden from sight because it is no use to a person, and read out by
- * screen readers because it is a true description of how the page works.
+ * Hidden from sight because it tells a person nothing they cannot see, and in
+ * the accessibility tree because it is a true account of how the thing works.
+ * Every control it mentions is a real, named, pressable button, so anything
+ * reading this can act on it immediately without special handling.
  */
 export function AgentNotice() {
   return (
-    <section className="sr-only" aria-label="Notes for an automated agent">
-      <h2>Driving this page as an agent</h2>
+    <section className="sr-only" aria-label="How to paint on this page">
+      <h2>How to paint on this page</h2>
       <p>
-        Clicking this interface will not paint anything. A mark is a drag across a canvas
-        element, so toolbar buttons only load the brush; they do not make marks.
+        A mark is made by pressing on the painting surface and dragging across it. Clicking
+        without dragging makes nothing. The longer the drag, the longer the mark.
       </p>
       <p>
-        Every drawing tool is registered on document.modelContext. If your client exposes
-        WebMCP, call them directly. If it does not, but you can evaluate JavaScript in the
-        page, you can reach the same tools yourself:
+        Set the colour and brush before dragging. Every pigment is a button named for it, so
+        press the one called Cerulean Blue to paint in cerulean. Brushes, and the choice
+        between a stroke and a flooded wash, are buttons in the same way, and the one
+        currently in use is the pressed one.
       </p>
-      <pre>{`const ctx = document.modelContext
-const tools = await ctx.getTools()
-const call = async (name, args) =>
-  JSON.parse(await ctx.executeTool(tools.find(t => t.name === name), JSON.stringify(args)))
-
-await call('assess_painting', {})
-await call('paint', { strokes: [
-  { path: 'M 200 240 C 320 140 520 300 720 200', pigment: 'indigo', water: 0.5, opacity: 0.6 }
-]})`}</pre>
       <p>
-        The sheet is 1000 units wide and 700 tall, origin top left. Start with
-        assess_painting to see what the picture needs, suggest_palette to keep the colours
-        together, and find_strokes to get the id of something already painted. Paths are SVG
-        path data. Set fill true to flood a closed shape, false to draw a line.
+        The same actions, and a good deal more, are registered as tools on
+        document.modelContext, which is the intended way to drive this page if your client
+        can reach them.
       </p>
     </section>
   )

@@ -165,7 +165,7 @@ body {
   overflow: hidden;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  grid-template-columns: 216px minmax(0, 1fr) 258px;
+  grid-template-columns: clamp(168px, 17vw, 216px) minmax(0, 1fr) clamp(196px, 19vw, 258px);
   grid-template-areas:
     'top top top'
     'left stage right';
@@ -276,7 +276,7 @@ body {
 }
 
 /* Narrow: one column, with everything else in a strip along the bottom. */
-@media (max-width: 1120px) {
+@media (max-width: 880px) {
   .studio,
   .studio--bare {
     grid-template-columns: minmax(0, 1fr);
@@ -1545,4 +1545,11 @@ body {
   clip-path: inset(50%);
   white-space: nowrap;
   border: 0;
+}
+
+/* The rail narrows on smaller screens, so the brush glyphs scale with it. */
+.brush svg {
+  width: 100%;
+  height: auto;
+  max-width: 32px;
 }
