@@ -1028,6 +1028,29 @@ function surfaceKey(): string {
  */
 export type SurfaceTransport = 'native' | 'bridge' | 'local' | 'none'
 
+/** The slice of `ModelContext` this file actually uses. */
+type ModelContextLike = NonNullable<Document['modelContext']>
+
+function existing(): ModelContextLike | null {
+  if (typeof document === 'undefined') return null
+  return 'modelContext' in document && document.modelContext ? document.modelContext : null
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/**
+ * MCP-B runtimes add a non-standard `listTools()` to the context they inject;
+ * a browser's own implementation has only the spec surface. Guessing wrong
+ * still lands on a reachable transport, so the worst case is the wrong label
+ * on a working connection, never a false one.
+ */
+function classify(context: ModelContextLike): SurfaceTransport {
+  const extras = context as { listTools?: unknown }
+  return typeof extras.listTools === 'function' ? 'bridge' : 'native'
+}
+
 export interface SurfaceStatus {
   supported: boolean
   transport: SurfaceTransport
@@ -1066,6 +1089,9 @@ class ToolSurface {
   private error?: string
   private pending: Promise<void> = Promise.resolve()
   private syncQueued = false
+  /** The context our tools are currently registered into. */
+  private context: ModelContextLike | null = null
+  private watching = false
 
   onStatus(fn: StatusListener): () => void {
     this.listeners.add(fn)
@@ -1149,45 +1175,46 @@ class ToolSurface {
     for (const fn of this.listeners) fn(s)
   }
 
+  /**
+   * How long to wait for somebody else's context before installing ours.
+   *
+   * Bridges are late. An extension relaying to a desktop client, or a host
+   * browser wiring up its own agent, generally injects `document.modelContext`
+   * after the page has loaded. Installing the polyfill the instant we find the
+   * property missing wins that race and then loses the point of it: our tools
+   * end up registered into a context with no transport behind it, the real
+   * bridge arrives to find the property taken, and the page truthfully reports
+   * that nothing is connected while an agent sits there with no tools.
+   */
+  private static GRACE_MS = 1400
+
   async mount(): Promise<void> {
     if (this.mounted) return
     if (typeof document === 'undefined') return
+    this.mounted = true
 
-    // Whoever put `document.modelContext` there before we did owns a way out of
-    // the page: the browser's own implementation, or an extension relaying to a
-    // client outside it. Either way an agent can reach the tools. If nobody did,
-    // the polyfill gives us the same API with no transport behind it, and the
-    // page still works for the person sitting at it.
-    const provided = 'modelContext' in document && Boolean(document.modelContext)
-    if (provided) {
-      // MCP-B runtimes add a non-standard `listTools()` to the context they
-      // inject; the browser's own implementation has only the spec surface.
-      // A guess either way still lands on a reachable transport, so the worst
-      // case is the wrong label on a working connection, never a false one.
-      const extras = document.modelContext as { listTools?: unknown }
-      this.transport = typeof extras.listTools === 'function' ? 'bridge' : 'native'
-    } else {
+    if (!existing()) await wait(ToolSurface.GRACE_MS)
+
+    const provided = existing()
+    if (!provided) {
       try {
         initializeWebMCPPolyfill()
-        this.transport = document.modelContext ? 'local' : 'none'
       } catch (err) {
-        this.transport = 'none'
         this.error = err instanceof Error ? err.message : String(err)
       }
     }
 
-    const context = document.modelContext
+    const context = existing()
     if (!context) {
       this.transport = 'none'
       this.error ??= 'This browser does not expose document.modelContext.'
       this.emit()
+      this.watch()
       return
     }
 
-    this.mounted = true
-    await this.registerCore()
-    this.key = surfaceKey()
-    await this.rebuildContextual()
+    await this.adopt(context, provided ? classify(context) : 'local')
+    this.watch()
 
     // Keep the toolbox in step with the studio.
     studio.subscribe(() => {
@@ -1196,8 +1223,43 @@ class ToolSurface {
     this.emit()
   }
 
+  /** Register the whole toolbox into a context, whichever one turned up. */
+  private async adopt(context: ModelContextLike, transport: SurfaceTransport): Promise<void> {
+    this.context = context
+    this.transport = transport
+    this.key = ''
+    await this.registerCore()
+    this.key = surfaceKey()
+    await this.rebuildContextual()
+    this.emit()
+  }
+
+  /**
+   * Watch for somebody better turning up.
+   *
+   * Even with the grace period a bridge can attach late, and when it does the
+   * tools have to move across to it. Cheap to check and the alternative is an
+   * agent staring at an empty toolbox.
+   */
+  private watch(): void {
+    if (this.watching) return
+    this.watching = true
+    const startedAt = Date.now()
+    const tick = async () => {
+      const live = existing()
+      if (live && live !== this.context) {
+        await this.adopt(live, classify(live))
+      } else if (!this.context && live) {
+        await this.adopt(live, classify(live))
+      }
+      // Attentive for the first minute, then just occasionally.
+      setTimeout(tick, Date.now() - startedAt < 60000 ? 1000 : 8000)
+    }
+    setTimeout(tick, 1000)
+  }
+
   private async registerCore(): Promise<void> {
-    const context = document.modelContext
+    const context = this.context
     if (!context) return
     this.core?.abort()
     this.core = new AbortController()
@@ -1238,7 +1300,7 @@ class ToolSurface {
     // Serialise: registrations are async, and two overlapping rebuilds would
     // race on the tool names.
     this.pending = this.pending.then(async () => {
-      const context = document.modelContext
+      const context = this.context
       if (!context) return
       this.contextual?.abort()
       this.contextual = new AbortController()
