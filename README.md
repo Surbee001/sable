@@ -198,17 +198,28 @@ Painting buys a minute.
 That is the whole handover protocol, and it needs no coordination between the
 two of them, because the tool surface is already the thing they share.
 
-## Winding it back
+## The timeline
 
-The scrubber under the sheet replays the painting mark by mark, and the track is
-one tick per mark coloured by who made it, so the shape of the collaboration is
-legible before you play anything.
+Under the sheet, the whole journey in two lanes: the agent's marks above, yours
+below, in the order they happened. Play it back and the painting rebuilds itself
+mark by mark, with the one that has just landed ringed on the paper so you can
+see which it is.
 
-This is only possible because the sheet is a list of marks rather than a picture
-of them. There is nothing to reconstruct: winding back just means drawing fewer
-of them. A flattened image cannot be asked what it looked like ten minutes ago,
-and that difference is the entire argument of the project, so it is worth being
-able to see.
+The arrangement is the point. A list of marks tells you what happened; two lanes
+tell you *how it went*. Long runs in one lane are somebody working alone, and
+the places the lanes interleave are where the painting was actually made
+together. On the study that ships with the app you can read it without playing
+anything: seven marks laid in by the agent, then a human one, then back and
+forth to the end.
+
+Both lanes hold a cell for every mark, filled in one and empty in the other, so
+the two stay in step without anything being positioned by hand.
+
+None of it is possible unless the sheet is a list of marks rather than a picture
+of them. There is nothing to reconstruct: winding back just means drawing fewer.
+A flattened image cannot be asked what it looked like ten minutes ago, and that
+difference is the entire argument of the project, so it is worth being able to
+watch.
 
 ## Try it
 
@@ -236,9 +247,26 @@ npm install
 npm run dev
 ```
 
-WebMCP needs a browser that exposes `document.modelContext`, meaning recent
-Chrome or ChatGPT's in-app browser. Everywhere else the polyfill installs it, so
-the page and its tools still work.
+### Connecting an agent
+
+The page is a WebMCP *provider*: it registers tools on `document.modelContext`
+and never speaks MCP itself. Something else has to carry the calls in. There are
+three ways that happens, and the Agent tab tells you which one you are in.
+
+- **The browser implements WebMCP.** Chrome launched with
+  `--enable-features=WebMCP`, or ChatGPT's in-app browser. Sable registers into
+  the browser's own context and its agent can call every tool. Nothing to set up.
+- **An extension supplies it.** The [MCP-B extension](https://docs.mcp-b.ai)
+  injects a `document.modelContext` of its own and relays the page's tools out
+  to a client such as Claude Desktop. Sable finds it already there and registers
+  into it. This is the easiest path on an ordinary Chrome.
+- **Neither, so the polyfill.** `@mcp-b/webmcp-polyfill` gives the page the same
+  API and **no transport at all** — it is explicit that browser transport
+  belongs to the separate MCP-B runtime. The toolbox is real and wired to the
+  document, the studio works, and nothing outside the page can call it. The
+  panel says so rather than showing a live connection, because the failure it
+  would otherwise cause is someone debugging their agent when the answer is
+  their browser.
 
 ```bash
 npm run build      # production build, fully static

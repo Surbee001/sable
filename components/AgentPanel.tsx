@@ -60,7 +60,8 @@ const CONTEXTUAL = new Set([
 
 const EMPTY: SurfaceStatus = {
   supported: false,
-  native: false,
+  transport: 'none',
+  reachable: false,
   toolNames: [],
   activeTool: null,
   recentTools: [],
@@ -69,15 +70,46 @@ const EMPTY: SurfaceStatus = {
   lastCallAt: 0,
 }
 
+/**
+ * What the dot means.
+ *
+ * Registering tools and being connectable are not the same thing, and this
+ * panel is the only place that can say so. The polyfill installs the API and
+ * no transport with it, so `local` is a complete, working toolbox that nothing
+ * outside the page can call. Showing that as a live connection sends someone
+ * hunting for a fault in their agent when the answer is their browser.
+ */
+const TRANSPORT: Record<
+  SurfaceStatus['transport'],
+  { dot: string; label: string; detail?: string }
+> = {
+  native: { dot: 'dot--live', label: 'Native WebMCP' },
+  bridge: { dot: 'dot--live', label: 'Connected through an extension' },
+  local: {
+    dot: 'dot--local',
+    label: 'Polyfill only, nothing connected',
+    detail:
+      'Every tool below is registered and working, but the polyfill carries no transport, ' +
+      'so no agent outside this page can call them yet. Three things can: Chrome launched ' +
+      'with --enable-features=WebMCP, ChatGPT’s in-app browser, or the MCP-B extension from ' +
+      'docs.mcp-b.ai, which relays this toolbox out to a client such as Claude Desktop.',
+  },
+  none: {
+    dot: 'dot--off',
+    label: 'Not available in this browser',
+    detail:
+      'This browser exposes no document.modelContext, and the polyfill could not install one.',
+  },
+}
+
 export function AgentPanel() {
   const [status, setStatus] = useState<SurfaceStatus>(EMPTY)
   const [appeared, setAppeared] = useState<string[]>([])
   const previous = useRef<string[]>([])
 
-  useEffect(() => {
-    void toolSurface.mount()
-    return toolSurface.onStatus(setStatus)
-  }, [])
+  // Only watches. Mounting the surface belongs to the studio, not to whether
+  // this panel happens to be the open tab: see Studio.tsx.
+  useEffect(() => toolSurface.onStatus(setStatus), [])
 
   // Flag tools that have just come into existence, so the change is something
   // you can watch rather than something you have to be told about.
@@ -105,16 +137,14 @@ export function AgentPanel() {
   return (
     <>
       <div className="status">
-        <span className={`dot ${status.supported ? 'dot--live' : 'dot--off'}`} />
-        <span className="note grow">
-          {status.supported
-            ? status.native
-              ? 'Native WebMCP'
-              : 'WebMCP via polyfill'
-            : 'Not available in this browser'}
-        </span>
+        <span className={`dot ${TRANSPORT[status.transport].dot}`} />
+        <span className="note grow">{TRANSPORT[status.transport].label}</span>
         <span className="field-value">{status.toolNames.length} tools</span>
       </div>
+
+      {TRANSPORT[status.transport].detail ? (
+        <p className="note note--connect">{TRANSPORT[status.transport].detail}</p>
+      ) : null}
 
       {status.activeTool ? (
         <div className="working">

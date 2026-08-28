@@ -269,6 +269,16 @@ export function Sheet() {
 
     const byId = new Map(scene.strokes.map((s) => [s.id, s]))
 
+    // While winding back, ring the mark that has just landed, so the replay
+    // shows which one it is rather than only that something changed.
+    if (replay !== null) {
+      const order = paintOrder(scene)
+      const landed = order[replay - 1]
+      if (landed) {
+        outline(ctx, landed, landed.author === 'agent' ? ink.agent : ink.accent, 2.6, 0.9)
+      }
+    }
+
     for (const id of ui.selection) {
       const stroke = byId.get(id)
       if (stroke) outline(ctx, stroke, ink.accent, 2.2, 1)
@@ -286,7 +296,7 @@ export function Sheet() {
         }
       }
     }
-  }, [duet, fit, scene, size, ui.selection])
+  }, [duet, fit, replay, scene, size, ui.selection])
 
   useEffect(() => {
     drawUi()

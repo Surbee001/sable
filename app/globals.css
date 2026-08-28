@@ -225,7 +225,7 @@ body {
 .stage-inner {
   width: 100%;
   /* Bounded by whichever runs out first, the column or the height. */
-  max-width: min(1180px, calc((100dvh - 186px) * 10 / 7));
+  max-width: min(1180px, calc((100dvh - 214px) * 10 / 7));
 }
 
 .sheet-frame {
@@ -306,7 +306,7 @@ body {
   }
 
   .stage-inner {
-    max-width: min(100%, calc((100dvh - 240px) * 10 / 7));
+    max-width: min(100%, calc((100dvh - 268px) * 10 / 7));
   }
 }
 
@@ -878,6 +878,12 @@ body {
   background: #3fae72;
 }
 
+/* Registered but unreachable. Not a fault, so not a red light: the studio is
+   working and only the way out of the page is missing. */
+.dot--local {
+  background: var(--accent);
+}
+
 .dot--off {
   background: var(--text-faint);
 }
@@ -894,6 +900,16 @@ body {
   align-items: center;
   gap: 7px;
   margin-bottom: 12px;
+}
+
+/* How to connect one, when nothing is connected. Sits under the status line as
+   the answer to the question the dot has just raised. */
+.note--connect {
+  margin: -4px 0 12px;
+  padding: 8px 10px;
+  border-radius: var(--radius-inner);
+  background: var(--accent-soft);
+  color: var(--text-soft);
 }
 
 /* What the agent is doing at this instant. An agent working through a page is
@@ -1473,49 +1489,117 @@ body {
   gap: 11px;
 }
 
-/* ---------------------------------------------------------------- replay */
+/* -------------------------------------------------------------- timeline */
 
-.replay {
-  display: flex;
+.timeline {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
   align-items: center;
-  gap: 9px;
+  gap: 4px 10px;
   margin-top: 12px;
   padding: 0 2px;
 }
 
-.track {
+.timeline-controls {
+  grid-row: 1 / 3;
+  display: flex;
+  gap: 1px;
+}
+
+.lanes {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.lane {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.lane-name {
+  width: 34px;
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: right;
+}
+
+.lane-name--agent {
+  color: var(--agent);
+}
+
+.lane-name--human {
+  color: var(--accent);
+}
+
+/* Both lanes hold a cell for every mark, filled in one and empty in the other,
+   so they stay in step without anything being positioned by hand. */
+.lane-track {
   display: flex;
   flex: 1;
   gap: 2px;
   min-width: 0;
-  height: 18px;
+  height: 11px;
   align-items: center;
 }
 
-.tick {
+.cell {
   flex: 1;
   min-width: 2px;
-  height: 4px;
+  height: 100%;
   padding: 0;
   border: 0;
+  background: transparent;
+}
+
+.mark {
   border-radius: 2px;
   background: var(--card-sunk);
   cursor: pointer;
   transition:
-    height 0.16s var(--ease),
-    background 0.2s var(--ease);
+    background 0.2s var(--ease),
+    transform 0.14s var(--ease);
 }
 
-.tick:hover {
-  height: 12px;
+.mark:hover {
+  transform: scaleY(1.35);
 }
 
-.tick--shown.tick--human {
+.mark--done.mark--agent {
+  background: var(--agent);
+}
+
+.mark--done.mark--human {
   background: var(--accent);
 }
 
-.tick--shown.tick--agent {
+.mark--now {
+  transform: scaleY(1.5);
+}
+
+.mark--now.mark--agent {
   background: var(--agent);
+  box-shadow: 0 0 0 2px var(--agent-soft);
+}
+
+.mark--now.mark--human {
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.timeline-read {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  min-width: 0;
+  padding-left: 42px;
 }
 
 .replay-count {
@@ -1526,10 +1610,21 @@ body {
   white-space: nowrap;
 }
 
-.replay-who {
-  font-size: 10px;
-  font-weight: 600;
+.replay-who,
+.replay-hint {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 10px;
+}
+
+.replay-hint {
+  color: var(--text-faint);
+}
+
+.replay-who {
+  font-weight: 600;
 }
 
 .replay-who--human {

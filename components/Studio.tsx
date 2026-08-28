@@ -16,12 +16,13 @@ import { studio } from '@/lib/store'
 import { applyTheme, currentTheme, type Theme } from '@/lib/theme'
 import { useMediaQuery } from '@/lib/useMediaQuery'
 import { useStudio } from '@/lib/useStudio'
+import { toolSurface } from '@/lib/webmcp'
 import { Activity } from './Activity'
 import { AgentPanel } from './AgentPanel'
 import { Duet } from './Duet'
 import { Inspector } from './Inspector'
 import { Layers } from './Layers'
-import { Replay } from './Replay'
+import { Timeline } from './Timeline'
 import { Sheet } from './Sheet'
 import { Toolbox } from './Toolbox'
 import { Welcome } from './Welcome'
@@ -43,6 +44,15 @@ export function Studio() {
 
   // Turns hand over on their own, whichever panel happens to be open.
   useEffect(() => conductor.start(), [])
+
+  // Register the tools as soon as the studio exists. This used to live in the
+  // Agent panel, which meant the toolbox only came into being once that tab was
+  // rendered: on a narrow screen the dock opens closed, so an agent arriving at
+  // the page found no tools at all until someone tapped a tab. What the page
+  // offers an agent cannot depend on what the person is looking at.
+  useEffect(() => {
+    void toolSurface.mount()
+  }, [])
 
   // Selecting a mark is a request to look at it, so the panel follows. Letting
   // go of it falls back rather than leaving an empty tab selected. On a narrow
@@ -135,7 +145,7 @@ export function Studio() {
         <div className="stage">
           <div className="stage-inner">
             <Sheet />
-            <Replay />
+            <Timeline />
           </div>
         </div>
 
@@ -237,7 +247,7 @@ export function Studio() {
       <div className="stage">
         <div className="stage-inner">
           <Sheet />
-          <Replay />
+          <Timeline />
         </div>
       </div>
 
