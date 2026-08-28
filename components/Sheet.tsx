@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { decimate, pointsToPath, sampleSubpaths, type Point } from '@/lib/geometry'
+import { pointsToPath, resample, sampleSubpaths, type Point } from '@/lib/geometry'
 import { hitTest, selectionOutline } from '@/lib/hit'
 import { presence } from '@/lib/presence'
 import { studio } from '@/lib/store'
@@ -13,6 +13,25 @@ const MAX_DPR = 2
 /** Movement below this reads as a click, not a drag. */
 const CLICK_SLOP = 3
 const FLASH_MS = 2600
+/**
+ * How far each raw pointer sample pulls the brush towards it, 0..1.
+ *
+ * Low enough to take the tremor and the digitiser's stair-stepping out of the
+ * line, high enough that the brush still arrives where the hand is rather than
+ * trailing behind it. Below about 0.3 the lag is visible as the cursor pulling
+ * away from its own mark.
+ */
+const INPUT_SMOOTHING = 0.45
+/** Closest two recorded samples may sit, in sheet units. */
+const MIN_SAMPLE = 1.2
+/**
+ * Arc-length spacing of the committed path, in sheet units.
+ *
+ * One cubic per sample, so this trades file size against how faithfully a
+ * long stroke keeps its curves. Fine enough that the renderer's own sampling
+ * is the limit rather than this.
+ */
+const COMMIT_SAMPLE = 3.5
 
 /**
  * The sheet is four stacked canvases, because the four things drawn on it
@@ -48,7 +67,7 @@ export function Sheet() {
   const [size, setSize] = useState({ w: 0, h: 0 })
 
   const paintedRef = useRef<Stroke[] | null>(null)
-  const drawingRef = useRef<{ points: Point[] } | null>(null)
+  const drawingRef = useRef<{ points: Point[]; raw: Point | null } | null>(null)
   const dragRef = useRef<{ last: Point; moved: number; ids: string[] } | null>(null)
   const flashRef = useRef<{ ids: string[]; at: number } | null>(null)
   const fxFrameRef = useRef(0)
@@ -170,14 +189,20 @@ export function Sheet() {
         ctx.scale(sx, sy)
         renderStroke(
           ctx,
-          {
-            ...stroke,
-            path: pointsToPath(live.points) + (live.fill ? ' Z' : ''),
-          },
+          { ...stroke, path: '' },
           {
             wetness: layerOf.get(stroke.layerId)?.wetness ?? 0,
             tooth,
             settle: 0.5,
+            // Same reasoning as the human's mark below: these are already
+            // points, and re-deriving them through the DOM every frame is what
+            // made a long stroke get heavier the longer it went on.
+            centre: [
+              live.fill && live.points.length > 2
+                ? [...live.points, live.points[0]]
+                : live.points,
+            ],
+            preview: true,
           },
           sx,
           sy,
@@ -200,7 +225,10 @@ export function Sheet() {
           id: 'preview',
           layerId: layer?.id ?? '',
           kind: brush.kind,
-          path: pointsToPath(decimate(drawing.points, 2.5)) + (brush.fill ? ' Z' : ''),
+          // Only ever read back by the renderer, which is taking the points
+          // below instead. Building the real path data here would put the whole
+          // per-frame round trip back.
+          path: '',
           pigment: brush.pigment,
           water: brush.water,
           pressure: brush.pressure,
@@ -210,7 +238,17 @@ export function Sheet() {
           author: 'human',
           createdAt: 0,
         },
-        { wetness: layer?.wetness ?? 0, tooth, settle: 0.55 },
+        {
+          wetness: layer?.wetness ?? 0,
+          tooth,
+          settle: 0.55,
+          centre: [
+            brush.fill && drawing.points.length > 2
+              ? [...drawing.points, drawing.points[0]]
+              : drawing.points,
+          ],
+          preview: true,
+        },
         sx,
         sy,
       )
@@ -422,13 +460,21 @@ export function Sheet() {
 
   /* ---------------- pointer ---------------- */
 
-  const toSheet = useCallback((e: React.PointerEvent): Point => {
-    const rect = e.currentTarget.getBoundingClientRect()
-    return {
-      x: ((e.clientX - rect.left) / rect.width) * CANVAS_W,
-      y: ((e.clientY - rect.top) / rect.height) * CANVAS_H,
-    }
-  }, [])
+  const toClientSheet = useCallback(
+    (clientX: number, clientY: number, el: Element): Point => {
+      const rect = el.getBoundingClientRect()
+      return {
+        x: ((clientX - rect.left) / rect.width) * CANVAS_W,
+        y: ((clientY - rect.top) / rect.height) * CANVAS_H,
+      }
+    },
+    [],
+  )
+
+  const toSheet = useCallback(
+    (e: React.PointerEvent): Point => toClientSheet(e.clientX, e.clientY, e.currentTarget),
+    [toClientSheet],
+  )
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
@@ -456,7 +502,7 @@ export function Sheet() {
         return
       }
 
-      drawingRef.current = { points: [pt] }
+      drawingRef.current = { points: [pt], raw: pt }
       pumpFx()
     },
     [pumpFx, scene, toSheet, ui.mode, ui.selection],
@@ -481,12 +527,48 @@ export function Sheet() {
       }
 
       if (!drawing) return
-      const last = drawing.points[drawing.points.length - 1]
-      if (Math.hypot(pt.x - last.x, pt.y - last.y) < 2.2) return
-      drawing.points.push(pt)
+
+      /**
+       * Every position the pointer actually visited, not just the one the
+       * browser delivered on this frame.
+       *
+       * A 120Hz trackpad or a tablet reports far faster than the display
+       * refreshes, and the extra samples are held back and handed over in a
+       * batch. Reading only the event itself throws them away, which turns a
+       * fast curve into a handful of long chords: the corners the hand never
+       * made. This is where a fast stroke stops being polygonal.
+       */
+      const native = e.nativeEvent
+      const batch =
+        typeof native.getCoalescedEvents === 'function'
+          ? native.getCoalescedEvents()
+          : []
+      const moves: Point[] = batch.length
+        ? batch.map((m) => toClientSheet(m.clientX, m.clientY, e.currentTarget))
+        : [pt]
+
+      for (const raw of moves) {
+        // One pole of exponential smoothing. The hand shakes, and a digitiser
+        // quantises what is left, so the raw track has a wobble on it at a
+        // finer scale than any brush mark. Catmull-Rom interpolates every point
+        // it is given exactly, so without this the wobble is not just kept, it
+        // is overshot into visible kinks.
+        const prior = drawing.raw
+        const smoothed = prior
+          ? {
+              x: prior.x + (raw.x - prior.x) * INPUT_SMOOTHING,
+              y: prior.y + (raw.y - prior.y) * INPUT_SMOOTHING,
+            }
+          : raw
+        drawing.raw = smoothed
+
+        const last = drawing.points[drawing.points.length - 1]
+        if (Math.hypot(smoothed.x - last.x, smoothed.y - last.y) < MIN_SAMPLE) continue
+        drawing.points.push(smoothed)
+      }
       pumpFx()
     },
-    [pumpFx, toSheet],
+    [pumpFx, toClientSheet, toSheet],
   )
 
   const finish = useCallback(() => {
@@ -497,7 +579,17 @@ export function Sheet() {
     presence.setHuman(at.x, at.y, false)
 
     if (drawing) {
-      const points = decimate(drawing.points, 2.5)
+      /**
+       * Even arc-length samples, not "whatever was far enough apart".
+       *
+       * The stored path is Catmull-Rom through these points, and Catmull-Rom
+       * passes through every one of them exactly: its tangent at a point comes
+       * straight from that point's neighbours. Unevenly spaced samples
+       * therefore give unevenly weighted tangents, which is what put kinks in a
+       * curve the hand drew cleanly. Spacing them evenly is what makes the
+       * committed mark match the one that was on screen a frame earlier.
+       */
+      const points = resample(drawing.points, COMMIT_SAMPLE)
       if (points.length >= 2) {
         const brush = studio.getUi().brush
         studio.paint(

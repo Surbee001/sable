@@ -2,11 +2,12 @@ import {
   addPolygon,
   boundsOf,
   buildOutline,
-  decimate,
   deform,
   expand,
   makeRng,
+  resample,
   sampleSubpaths,
+  smoothPolyline,
   tracePolygon,
   type Point,
 } from './geometry'
@@ -32,6 +33,28 @@ import {
 const TUNING = {
   /** Centreline samples used to build the brush footprint. */
   centreSamples: 34,
+  /**
+   * Ceiling on the gap between centreline samples, in sheet units.
+   *
+   * A sample budget alone is a trap: dividing the length by a fixed count means
+   * a long stroke is described by exactly as many points as a short one, so the
+   * longer the line, the coarser the polygon that stands in for it. Past a few
+   * hundred units the brush footprint becomes a visible chain of flat segments
+   * with hard corners where the hand drew a curve. Capping the step instead
+   * means fidelity is constant per unit of paper and only the cost grows with
+   * the mark, which is the right way round.
+   */
+  maxCentreStep: 7,
+  /** Floor on the same, so a small mark does not turn into a point cloud. */
+  minCentreStep: 2.5,
+  /**
+   * Stamps to use for the mark under the brush right now.
+   *
+   * The preview is redrawn every frame for as long as the brush is down, so its
+   * cost is the one that decides whether drawing feels alive or syrupy. The
+   * finished mark is rendered once and can afford the full stack.
+   */
+  previewStamps: 7,
   /** Independent pigment layers stamped per stroke. */
   stampsDry: 8,
   stampsWet: 18,
@@ -250,6 +273,26 @@ export interface StrokeContext {
    * immediately is the difference between paint and a decal.
    */
   settle?: number
+  /**
+   * Centreline already in hand, one array per subpath, in sheet units.
+   *
+   * The mark being drawn right now exists as points before it exists as a path.
+   * Without this the preview converts those points to SVG path data, hands the
+   * string to the DOM to parse, and walks it back out with `getPointAtLength` —
+   * every frame, over a path that has grown by one more curve since the last
+   * one. That round trip costs more the longer the brush stays down, which is
+   * precisely when it can least afford to, and it produces the same points it
+   * was given. Passing them straight through skips all of it.
+   */
+  centre?: Point[][]
+  /**
+   * Draft quality, for a mark that is still under the brush.
+   *
+   * Drops the passes that cost the most and read the least at this size, and
+   * thins the stack of pigment layers. What it must not do is change how dark
+   * the mark lands, or lifting the brush would make it jump.
+   */
+  preview?: boolean
 }
 
 let scratch: HTMLCanvasElement | null = null
@@ -281,7 +324,8 @@ export function renderStroke(
   scaleX: number,
   scaleY: number,
 ): void {
-  const rawRuns = sampleSubpaths(stroke.path, 4)
+  const preview = context.preview === true
+  const rawRuns = context.centre ?? sampleSubpaths(stroke.path, 4)
   if (rawRuns.length === 0) return
 
   const brush = BRUSHES[stroke.kind]
@@ -292,9 +336,15 @@ export function renderStroke(
   const filled = stroke.fill === true
 
   const span = rawRuns.reduce((t, r) => t + pathSpan(r), 0)
-  const targetStep = Math.max(2.5, span / TUNING.centreSamples)
+  // Fidelity per unit of paper, not per stroke: see TUNING.maxCentreStep.
+  const targetStep = Math.min(
+    TUNING.maxCentreStep,
+    Math.max(TUNING.minCentreStep, span / TUNING.centreSamples),
+  )
   const runs = rawRuns
-    .map((r) => decimate(r, targetStep))
+    // Resample before smoothing: evenly spaced samples are what makes a fixed
+    // smoothing strength mean the same thing everywhere along the line.
+    .map((r) => smoothPolyline(resample(r, targetStep), 0.5, 1))
     .filter((r) => r.length >= (filled ? 3 : 2))
   if (runs.length === 0) return
 
@@ -308,9 +358,17 @@ export function renderStroke(
       (1 - pigment.staining * 0.3) +
     brush.chatter * 0.1
 
-  const stamps = Math.round(
+  const fullStamps = Math.round(
     TUNING.stampsDry + water * (TUNING.stampsWet - TUNING.stampsDry),
   )
+  const stamps = preview ? Math.min(TUNING.previewStamps, fullStamps) : fullStamps
+  /**
+   * Thinning the stack would otherwise thin the paint with it, and the mark
+   * would jump darker the moment the brush lifted. Layers of low-alpha paint
+   * accumulate as 1-(1-a)^n, so raising a in proportion to the layers dropped
+   * lands the preview within a shade or two of the finished mark.
+   */
+  const stampBoost = stamps < fullStamps ? Math.min(2.4, fullStamps / stamps) : 1
   const settle = context.settle === undefined ? 1 : clamp01(context.settle)
   const spreadFull = TUNING.spread * (0.2 + water * 0.8 + wetness * 0.5)
   // The wash starts as a tight core and creeps out to its full reach.
@@ -324,7 +382,8 @@ export function renderStroke(
     ? Math.max(5, Math.min(24, radius * 0.16))
     : Math.max(3, halfWidth * 0.8)
 
-  const [rgb, alpha] = pigmentInk(pigment, stroke)
+  const [rgb, baseAlpha] = pigmentInk(pigment, stroke)
+  const alpha = Math.min(0.92, baseAlpha * stampBoost)
   const falloff = 1.4 + (1 - water) * 2.5
 
   /**
@@ -449,7 +508,12 @@ export function renderStroke(
   // Same reasoning: no pigment in suspension, nothing to settle into the tooth.
   const gran =
     pigment.granulation * context.tooth * TUNING.granulation * (0.2 + load * 0.8) * settle
-  if (gran > 0.06 && widest.length) {
+  // Granulation is a clipped pattern fill over the whole mark, so it costs the
+  // most of anything here and scales with the area the stroke has reached. It
+  // is also the least visible thing at draft: pigment settling into the tooth
+  // arrives as the wash dries, which is exactly what the settle animation is
+  // already doing in the frames after the brush lifts.
+  if (!preview && gran > 0.06 && widest.length) {
     // Each mark gets its own grain orientation, so the tile never lines up
     // with its neighbours into a visible weave.
     const grainAngle = makeRng(stroke.seed ^ 0x6a11)() * Math.PI * 2
