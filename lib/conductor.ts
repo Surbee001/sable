@@ -19,10 +19,20 @@ import { toolSurface } from './webmcp'
 
 /** Pause before the studio takes a turn itself, so the change is legible. */
 const HANDOVER_MS = 1500
+/**
+ * How recently a tool must have been called for an agent to count as attached.
+ *
+ * This is the distinction that matters. "Is something mid-turn" is not the same
+ * question as "is anyone out there", and answering only the first one means the
+ * studio paints over a model that is simply still thinking. A model reasoning
+ * in a chat window can easily take half a minute between deciding to paint and
+ * saying so, which is an eternity next to a timer built for an empty room.
+ */
+const ATTACHED_MS = 180000
+/** How long an attached agent gets before the studio assumes it has stalled. */
+const ATTENDED_MS = 90000
 /** How long to keep waiting once an agent has actually started painting. */
-const PAINTING_MS = 60000
-/** How long a silent agent gets after its last look at the sheet. */
-const THINKING_MS = 9000
+const PAINTING_MS = 120000
 /** How often to look back in while an agent is mid-turn. */
 const POLL_MS = 900
 
@@ -45,6 +55,18 @@ class Conductor {
     return this.timer !== null
   }
 
+  /**
+   * Whether anything outside the page has used the tools lately.
+   *
+   * If so the turns belong to it and the studio should keep its hands off,
+   * however long it takes to answer. If not, nobody is coming, and painting the
+   * pass ourselves is the only way the score moves.
+   */
+  get attached(): boolean {
+    const { lastCallAt } = toolSurface.status()
+    return lastCallAt > 0 && Date.now() - lastCallAt < ATTACHED_MS
+  }
+
   private sync(): void {
     const duet = studio.getDuet()
     if (!duet) {
@@ -62,7 +84,7 @@ class Conductor {
     this.stop()
 
     const step = studio.currentStep()
-    if (step?.by === 'agent') this.schedule(HANDOVER_MS)
+    if (step?.by === 'agent') this.schedule(this.attached ? POLL_MS : HANDOVER_MS)
   }
 
   private schedule(delay: number): void {
@@ -105,9 +127,9 @@ class Conductor {
       return
     }
 
-    // It has only been looking. Looking is not taking the turn, but it is a
-    // reason to hold off a little longer before painting over its thinking.
-    if (status.lastCallAt > 0 && now - status.lastCallAt < THINKING_MS) {
+    // An agent is attached and this turn is its own. Silence is it thinking,
+    // not it being absent, so wait rather than paint over the top of it.
+    if (this.attached && now - this.turnStartedAt < ATTENDED_MS) {
       this.schedule(POLL_MS)
       return
     }

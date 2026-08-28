@@ -83,13 +83,26 @@ To see the dynamic half of the surface, select a mark in the app and run:
 `describe_selection` and `revise_selection` will have appeared, and
 `revise_selection`'s description will name the mark you picked.
 
+## Turn taking when a real model is connected
+
+This matters for the ChatGPT case specifically. The studio takes an agent's duet
+pass only when nothing is attached. It counts a tool call in the last three
+minutes as an agent being present, and once one is present it waits up to ninety
+seconds for it, silence included. A model reasoning in a chat window can easily
+take half a minute between deciding to paint and saying so, and a timer built
+for an empty room would paint straight over it.
+
+The panel says which of the two it is doing: **Handing over** when nobody is
+there, **Waiting for the agent** when somebody is.
+
 ## What has been verified, and what has not
 
 Checked, on every build, in Chrome 152:
 
-- 44 automated checks across four suites: the tool surface and its error
+- 48 automated checks across five suites: the tool surface and its error
   handling, dynamic registration and unregistration, the duet playing end to
-  end, automatic turn handover, the timeline, and both live-drawing paths.
+  end, automatic turn handover, deferring to a slow agent for a full 25 seconds
+  of silence, the timeline, and both live-drawing paths.
 - Every tool called through `document.modelContext.executeTool`, the same
   entry point an agent uses.
 - Both transports, native and polyfill only, and the panel telling the truth

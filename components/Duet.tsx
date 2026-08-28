@@ -1,6 +1,7 @@
 'use client'
 
 import { CheckCircle, Circle, Play } from '@phosphor-icons/react'
+import { conductor } from '@/lib/conductor'
 import { KAWA } from '@/lib/duet'
 import { studio } from '@/lib/store'
 import { useStudio } from '@/lib/useStudio'
@@ -70,7 +71,7 @@ export function Duet() {
           {step.by === 'agent' ? (
             <span className="waiting">
               <span className="working-pip" />
-              Handing over
+              {conductor.attached ? 'Waiting for the agent' : 'Handing over'}
             </span>
           ) : null}
         </div>
