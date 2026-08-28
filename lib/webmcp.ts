@@ -1,4 +1,5 @@
 import { initializeWebMCPPolyfill } from '@mcp-b/webmcp-polyfill'
+import { ensureModelContext } from './fallback-context'
 import { isValidPath, scalePath } from './geometry'
 import { PIGMENTS, SCHEMES, findScheme, getPigment, resolvePigment } from './palette'
 import { assess } from './assess'
@@ -1202,12 +1203,21 @@ class ToolSurface {
       } catch (err) {
         this.error = err instanceof Error ? err.message : String(err)
       }
+      // The polyfill does not always take. In at least one agent browser it
+      // installed nothing and left the page reporting that a studio full of
+      // working tools had none, which is a silly way to fail. Our own context
+      // is small and always available, so there is no reason to be at the
+      // mercy of that.
+      if (!existing()) {
+        const own = ensureModelContext()
+        if (own.error) this.error = own.error
+      }
     }
 
     const context = existing()
     if (!context) {
       this.transport = 'none'
-      this.error ??= 'This browser does not expose document.modelContext.'
+      this.error ??= 'Could not install document.modelContext on this page.'
       this.emit()
       this.watch()
       return

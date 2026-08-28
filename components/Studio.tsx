@@ -37,6 +37,15 @@ export function Studio() {
   const hasSelection = ui.selection.length > 0
   const [theme, setTheme] = useState<Theme>('light')
   const [chromeHidden, setChromeHidden] = useState(false)
+  /**
+   * The studio is a canvas, a pointer and a tool surface, none of which exist
+   * on a server. Rendering it only once mounted costs nothing and removes a
+   * whole class of hydration mismatch on hosting we cannot test against, which
+   * matters when the people who most need the page to work are opening it
+   * somewhere we have never seen.
+   */
+  const [ready, setReady] = useState(false)
+  useEffect(() => setReady(true), [])
   const narrow = useMediaQuery('(max-width: 1120px)')
   const [openTab, setOpenTab] = useState<Tab | null>(null)
 
@@ -90,6 +99,19 @@ export function Studio() {
   }
 
   const hide = chromeHidden ? ' float--hidden' : ''
+
+  if (!ready) {
+    return (
+      <div className="studio">
+        <header className="bar">
+          <div className="pill pill--text">
+            <span className="wordmark">Sable</span>
+            <span className="tagline">one sheet, two painters</span>
+          </div>
+        </header>
+      </div>
+    )
+  }
 
   const panel = (id: Tab) => {
     if (id === 'mark') return hasSelection ? <Inspector /> : null

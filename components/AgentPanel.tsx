@@ -96,9 +96,10 @@ const TRANSPORT: Record<
   },
   none: {
     dot: 'dot--off',
-    label: 'Not available in this browser',
+    label: 'No context could be installed',
     detail:
-      'This browser exposes no document.modelContext, and the polyfill could not install one.',
+      'Nothing supplied document.modelContext and the page could not define one either, ' +
+      'which should not happen. The studio still works by hand.',
   },
 }
 
