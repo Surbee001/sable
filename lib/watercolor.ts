@@ -338,7 +338,7 @@ export interface StrokeContext {
    *
    * The mark being drawn right now exists as points before it exists as a path.
    * Without this the preview converts those points to SVG path data, hands the
-   * string to the DOM to parse, and walks it back out with `getPointAtLength` —
+   * string to the DOM to parse, and walks it back out with `getPointAtLength`,
    * every frame, over a path that has grown by one more curve since the last
    * one. That round trip costs more the longer the brush stays down, which is
    * precisely when it can least afford to, and it produces the same points it

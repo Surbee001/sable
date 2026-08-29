@@ -1,5 +1,5 @@
 import { sampleSubpaths, type Point } from './geometry'
-import type { Stroke } from './types'
+import { WET, type Stroke } from './types'
 
 /**
  * Who is at the table, and where their hand is.
@@ -43,18 +43,6 @@ function durationFor(length: number): number {
 function settleFor(water: number): number {
   return 620 + water * 900
 }
-
-/**
- * How developed a mark looks the instant it is laid down.
- *
- * The brush is on the paper and the paint is visibly there, so this is not
- * zero. Starting the drying animation from zero meant a stroke you had just
- * watched yourself draw dropped almost out of sight the moment you lifted the
- * brush, then built back up, which reads as the mark appearing after the fact
- * rather than under your hand. The preview and the first frame of drying have
- * to be the same picture.
- */
-export const WET = 0.55
 
 /** Slow at the end, the way a drying edge does. */
 function ease(t: number): number {

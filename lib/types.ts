@@ -11,6 +11,23 @@
 export const CANVAS_W = 1000
 export const CANVAS_H = 700
 
+/**
+ * How developed a mark looks the instant it is laid down, 0 to 1.
+ *
+ * The brush is on the paper and the paint is visibly there, so this is not
+ * zero. Starting the drying animation from zero meant a stroke you had just
+ * watched yourself draw dropped almost out of sight the moment you lifted the
+ * brush, then built back up, which reads as the mark appearing after the fact
+ * rather than under your hand. The preview and the first frame of drying have
+ * to be the same picture.
+ *
+ * It lives here rather than with the settle clock because the renderer needs it
+ * too: this is the point at which the preview hands the mark over, so anything
+ * the preview does not draw has to start from nothing here rather than from
+ * whatever fraction the settle happens to be at.
+ */
+export const WET = 0.55
+
 export type Author = 'human' | 'agent'
 
 /** Brush geometry. Each kind has a different width profile along the stroke. */
