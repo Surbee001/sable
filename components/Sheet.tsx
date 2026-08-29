@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { pointsToPath, resample, sampleSubpaths, type Point } from '@/lib/geometry'
 import { hitTest, selectionOutline } from '@/lib/hit'
-import { presence, WET } from '@/lib/presence'
+import { presence } from '@/lib/presence'
 import { studio } from '@/lib/store'
 import { useStudio } from '@/lib/useStudio'
-import { BRUSHES, CANVAS_H, CANVAS_W, PAPERS, type Stroke } from '@/lib/types'
+import { BRUSHES, CANVAS_H, CANVAS_W, PAPERS, WET, type Stroke } from '@/lib/types'
 import { paintOrder, renderScene, renderStroke } from '@/lib/watercolor'
 
 const MAX_DPR = 2
@@ -68,7 +68,23 @@ export function Sheet() {
 
   const paintedRef = useRef<Stroke[] | null>(null)
   const groundRef = useRef('')
-  const drawingRef = useRef<{ points: Point[]; raw: Point | null } | null>(null)
+  const drawingRef = useRef<{
+    points: Point[]
+    raw: Point | null
+    /**
+     * Rolled when the brush goes down, not when the mark is committed.
+     *
+     * Every wobble in this renderer is seeded off the stroke: which side of the
+     * line goes soft, how far each pigment layer drifts, where the grain and
+     * the pooling sit. A preview drawn on one seed and a finished mark drawn on
+     * another are therefore two different marks that merely follow the same
+     * centreline, and lifting the brush swapped one for the other in a single
+     * frame. Carrying the seed through from here means the mark under the brush
+     * and the mark that dries are the same mark, and the settle is the only
+     * thing that changes.
+     */
+    seed: number
+  } | null>(null)
   const dragRef = useRef<{ last: Point; moved: number; ids: string[] } | null>(null)
   const flashRef = useRef<{ ids: string[]; at: number } | null>(null)
   const fxFrameRef = useRef(0)
@@ -106,7 +122,7 @@ export function Sheet() {
 
   /* ---------------- main: what has dried ---------------- */
 
-  useEffect(() => {
+  const drawMain = useCallback(() => {
     const canvas = mainRef.current
     if (!canvas || size.w === 0) return
     const resized = canvas.width !== size.w || canvas.height !== size.h
@@ -114,6 +130,9 @@ export function Sheet() {
     if (!ctx) return
     if (resized) paintedRef.current = null
 
+    // Live, for the same reason drawFx reads it live: this runs off presence as
+    // well as off a render, and presence does not wait for React.
+    const scene = studio.getScene()
     const order = paintOrder(scene).filter((s) => presence.isSettled(s.id))
     const prev = paintedRef.current
 
@@ -157,6 +176,10 @@ export function Sheet() {
       renderScene(ctx, { ...scene, strokes: order }, size.w, size.h)
     }
     paintedRef.current = order
+  }, [fit, size])
+
+  useEffect(() => {
+    drawMain()
   })
 
   /* ---------------- fx: what is still wet ---------------- */
@@ -256,7 +279,7 @@ export function Sheet() {
           pressure: brush.pressure,
           opacity: brush.opacity,
           fill: brush.fill,
-          seed: 7,
+          seed: drawing.seed,
           author: 'human',
           createdAt: 0,
         },
@@ -292,6 +315,22 @@ export function Sheet() {
 
   const pumpRef = useRef(pumpFx)
   pumpRef.current = pumpFx
+  const handoffRef = useRef(() => {})
+  /**
+   * main takes the mark and fx gives it up, in one task.
+   *
+   * A mark finishing its drying is the one moment both canvases have to change
+   * together: fx stops drawing it because it is settled, and main starts.
+   * Routing main's half through a React render put the two on different frames,
+   * and whichever landed first was wrong to look at — a frame with the mark on
+   * neither canvas reads as a blink, a frame with it on both multiplies the
+   * pigment over itself and reads as a thump. Painting them back to back here
+   * means the browser only ever sees the pair.
+   */
+  handoffRef.current = () => {
+    drawMain()
+    drawFx()
+  }
 
   /**
    * Subscribed once, with no dependencies, and deliberately so.
@@ -309,6 +348,7 @@ export function Sheet() {
       const settling = presence.settlingIds.length
       if (settling !== wasSettling) {
         wasSettling = settling
+        handoffRef.current()
         tick((n) => n + 1)
       }
     })
@@ -533,7 +573,7 @@ export function Sheet() {
         return
       }
 
-      drawingRef.current = { points: [pt], raw: pt }
+      drawingRef.current = { points: [pt], raw: pt, seed: Math.floor(Math.random() * 1e9) }
       pumpFx()
     },
     [pumpFx, scene, toSheet, ui.mode, ui.selection],
@@ -624,7 +664,11 @@ export function Sheet() {
       if (points.length >= 2) {
         const brush = studio.getUi().brush
         studio.paint(
-          { path: pointsToPath(points) + (brush.fill ? ' Z' : ''), fill: brush.fill },
+          {
+            path: pointsToPath(points) + (brush.fill ? ' Z' : ''),
+            fill: brush.fill,
+            seed: drawing.seed,
+          },
           'human',
         )
       }
@@ -661,7 +705,7 @@ export function Sheet() {
     <div ref={wrapRef}>
       <div className="sheet-frame">
         <canvas ref={mainRef} className="sheet-layer" />
-        <canvas ref={fxRef} className="sheet-layer" />
+        <canvas ref={fxRef} className="sheet-layer sheet-layer--wash" />
         <canvas ref={uiRef} className="sheet-layer" />
         <canvas
           ref={cursorRef}

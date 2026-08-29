@@ -18,6 +18,7 @@ import {
   CANVAS_H,
   CANVAS_W,
   PAPERS,
+  WET,
   type Layer,
   type PaperKind,
   type Scene,
@@ -421,7 +422,29 @@ export function renderStroke(
   const fullStamps = Math.round(
     TUNING.stampsDry + water * (TUNING.stampsWet - TUNING.stampsDry),
   )
-  const stamps = preview ? Math.min(TUNING.previewStamps, fullStamps) : fullStamps
+  /**
+   * The preview draws a subset of the finished stack, not a shorter one.
+   *
+   * Every layer's shape comes out of its own index: `t` decides how far it is
+   * expanded and how transparent it is, and the index seeds the wobble that
+   * keeps it from nesting inside its neighbours. Rendering seven layers instead
+   * of eighteen therefore did not thin the mark, it built a different one —
+   * seven layers at seven other positions with seven other edges — so lifting
+   * the brush reshuffled every bit of mottling in the interior even with the
+   * seed held fixed. Keeping the loop at its full length and skipping most of
+   * the layers means the ones that do get drawn are the same layers, in the
+   * same places, that the finished mark will have.
+   */
+  const lastStamp = Math.max(0, fullStamps - 1)
+  const skip = preview ? Math.max(1, Math.ceil(fullStamps / TUNING.previewStamps)) : 1
+  // The widest layer sets the clip for the pooling, grain and gradient, and the
+  // first past 0.62 is the one the rim is stroked around. Both are drawn
+  // whatever the decimation lands on, so neither moves at the handover.
+  const rimStamp = fullStamps > 1 ? Math.floor(0.62 * lastStamp) + 1 : -1
+  const drawsStamp = (i: number): boolean =>
+    i % skip === 0 || i === lastStamp || i === rimStamp
+  let stamps = 0
+  for (let i = 0; i < fullStamps; i++) if (drawsStamp(i)) stamps++
   /**
    * Thinning the stack would otherwise thin the paint with it, and the mark
    * would jump darker the moment the brush lifted. Layers of low-alpha paint
@@ -430,9 +453,33 @@ export function renderStroke(
    */
   const stampBoost = stamps < fullStamps ? Math.min(2.4, fullStamps / stamps) : 1
   const settle = context.settle === undefined ? 1 : clamp01(context.settle)
+  /**
+   * The drying, remapped to start where the preview lets go.
+   *
+   * `settle` runs from WET to 1, because the mark is already visibly on the
+   * paper the moment the brush touches down. That is the right curve for
+   * anything the preview also draws: it is already showing some of the effect,
+   * and the settle carries it the rest of the way. It is the wrong curve for
+   * anything the preview skips, which is absent one frame and then whatever
+   * `settle` happens to be on the next — better than half of it, arriving all
+   * at once, which is the pop you see when the brush lifts. Those passes ramp
+   * on this instead, so they start from nothing at the handover.
+   */
+  const dried = clamp01((settle - WET) / (1 - WET))
   const spreadFull = TUNING.spread * (0.2 + water * 0.8 + wetness * 0.5)
-  // The wash starts as a tight core and creeps out to its full reach.
-  const spread = spreadFull * (0.22 + settle * 0.78)
+  /**
+   * The wash starts as a tight core and creeps out to its full reach.
+   *
+   * On `dried` rather than `settle`, which is the whole of the creep instead of
+   * the last two fifths of it. Paint under a moving brush has not gone anywhere
+   * yet: it is still the shape of the footprint, and the spreading is what
+   * happens in the seconds afterwards. Ramping from WET meant the mark was
+   * already most of the way out when the brush lifted, so the part you could
+   * actually watch was a few per cent of the brush width — present in the
+   * numbers, invisible on the paper. The dry mark is unchanged; only how far it
+   * travels to get there is.
+   */
+  const spread = spreadFull * (0.12 + dried * 0.88)
   const radius = spanRadius(allPoints)
   // A big wash pools further than a small one, so drift scales with the mark.
   const drift =
@@ -529,15 +576,20 @@ export function renderStroke(
     return out
   }
 
-  for (let i = 0; i < stamps; i++) {
-    const t = stamps === 1 ? 0 : i / (stamps - 1)
-    const polys = stampPolys(t, i)
-    if (polys.length === 0) continue
+  for (let i = 0; i < fullStamps; i++) {
+    const t = fullStamps === 1 ? 0 : i / lastStamp
 
     // A little drift per layer. Without this the interior reads dead flat;
     // with it, the wash pools unevenly the way a real one does.
+    // Drawn onto its own or not, every layer takes its two numbers, so a
+    // skipped one still advances the sequence and the layers that survive the
+    // decimation sit exactly where the full stack would have put them.
     const dx = (jitter() - 0.5) * drift
     const dy = (jitter() - 0.5) * drift
+    if (!drawsStamp(i)) continue
+
+    const polys = stampPolys(t, i)
+    if (polys.length === 0) continue
 
     bctx.save()
     bctx.translate(dx, dy)
@@ -605,7 +657,7 @@ export function renderStroke(
 
   // Same reasoning: no pigment in suspension, nothing to settle into the tooth.
   const gran =
-    pigment.granulation * context.tooth * TUNING.granulation * (0.2 + load * 0.8) * settle
+    pigment.granulation * context.tooth * TUNING.granulation * (0.2 + load * 0.8) * dried
   // Granulation is a clipped pattern fill over the whole mark, so it costs the
   // most of anything here and scales with the area the stroke has reached. It
   // is also the least visible thing at draft: pigment settling into the tooth
@@ -660,14 +712,18 @@ export function renderStroke(
   // Blooms. Drop clean water into a wash that has begun to set and it shoves
   // the pigment outward into a pale cauliflower. Lifting pigment back out of
   // the buffer is exactly what destination-out does.
-  // A bloom needs the wash to have begun setting before water can push it.
-  if (water > 0.62 && settle > 0.72 && widest.length) {
+  // A bloom needs the wash to have begun setting before water can push it, so
+  // it starts late — but it has to grow rather than switch on. A threshold on
+  // `settle` put a finished cauliflower into one frame partway through the
+  // drying, which is the same pop the granulation used to make, just later.
+  const bloom = clamp01((dried - 0.38) / 0.62)
+  if (water > 0.62 && bloom > 0.02 && widest.length) {
     applyBloom(
       bctx,
       widest.flat(),
       stroke.seed,
       water,
-      TUNING.bloom,
+      TUNING.bloom * bloom,
       `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`,
     )
   }
