@@ -235,9 +235,6 @@ body {
   border-radius: 5px;
   overflow: hidden;
   box-shadow: var(--lift-sheet);
-  /* Keeps the wash layer's blending inside the sheet. Without it the backdrop
-     it multiplies against is the page, not the paper. */
-  isolation: isolate;
 }
 
 .sheet-layer {
@@ -245,21 +242,6 @@ body {
   inset: 0;
   width: 100%;
   height: 100%;
-}
-
-/**
- * The wet layer, blended the way the dry one is.
- *
- * Watercolour is subtractive, and every mark on the main canvas is composited
- * into it with multiply: paint over paint filters the light twice. A mark still
- * drying lives on its own canvas stacked above, and the browser was compositing
- * that one normally, so the same stroke was blended two different ways either
- * side of the moment it dried, lighter while wet, and noticeably so where it
- * lapped over a mark already down, then dropping to its real colour on the
- * handover. This is what makes the wet mark and the dry one the same colour.
- */
-.sheet-layer--wash {
-  mix-blend-mode: multiply;
 }
 
 .sheet-layer--interactive {

@@ -49,14 +49,8 @@ const TUNING = {
   maxCentreStep: 7,
   /** Floor on the same, so a small mark does not turn into a point cloud. */
   minCentreStep: 2.5,
-  /**
-   * Stamps to use for the mark under the brush right now.
-   *
-   * The preview is redrawn every frame for as long as the brush is down, so its
-   * cost is the one that decides whether drawing feels alive or syrupy. The
-   * finished mark is rendered once and can afford the full stack.
-   */
-  previewStamps: 7,
+  /** Points along a mark at which its bleed is asked about. */
+  bleedSamples: 24,
   /** Independent pigment layers stamped per stroke. */
   stampsDry: 8,
   stampsWet: 18,
@@ -347,13 +341,19 @@ export interface StrokeContext {
    */
   centre?: Point[][]
   /**
-   * Draft quality, for a mark that is still under the brush.
+   * The settle at a fraction along the mark, rather than for the mark at large.
    *
-   * Drops the passes that cost the most and read the least at this size, and
-   * thins the stack of pigment layers. What it must not do is change how dark
-   * the mark lands, or lifting the brush would make it jump.
+   * A stroke is not laid down all at once, so it does not dry all at once
+   * either: by the time the brush reaches the end of a long pull, the start has
+   * been sitting in the paper for a second and has crept out into it. With only
+   * `settle` to go on the whole mark had to share one clock, and that clock
+   * could not start until the mark existed, which is to say until the brush
+   * lifted. So the mark held the exact width of the footprint for as long as
+   * you were drawing it and then did all of its bleeding afterwards. Given
+   * this, every point carries its own age and the spreading happens under the
+   * hand, where it belongs.
    */
-  preview?: boolean
+  bleed?: (t: number) => number
 }
 
 let scratch: HTMLCanvasElement | null = null
@@ -372,6 +372,17 @@ function getScratch(w: number, h: number): [HTMLCanvasElement, CanvasRenderingCo
 /**
  * Render one stroke.
  *
+ * The same way whether the brush is still on it or it dried an hour ago. There
+ * used to be a draft path that thinned the stack of pigment layers for the mark
+ * under the brush, with the per-layer alpha raised to compensate. It could not
+ * be made to compensate: layers of the same colour composite through multiply
+ * as well as through alpha, so a stack of seven does not merely land paler than
+ * a stack of thirteen, it lands a slightly different colour, and no single
+ * scaling of alpha fixes both at once. What you saw was the mark stepping a
+ * shade brighter as the brush came up. The finished stack is what the settle
+ * animation has always drawn, sixty times a second for a second after every
+ * mark, so the cost was never the problem the draft path was solving.
+ *
  * Built up in a scratch buffer as a stack of independently deformed polygons,
  * each one a notional layer of pigment dropping out of suspension, then
  * composited onto the sheet in a single multiply. Doing the build-up off-sheet
@@ -385,7 +396,6 @@ export function renderStroke(
   scaleX: number,
   scaleY: number,
 ): void {
-  const preview = context.preview === true
   const rawRuns = context.centre ?? sampleSubpaths(stroke.path, 4)
   if (rawRuns.length === 0) return
 
@@ -422,64 +432,53 @@ export function renderStroke(
   const fullStamps = Math.round(
     TUNING.stampsDry + water * (TUNING.stampsWet - TUNING.stampsDry),
   )
-  /**
-   * The preview draws a subset of the finished stack, not a shorter one.
-   *
-   * Every layer's shape comes out of its own index: `t` decides how far it is
-   * expanded and how transparent it is, and the index seeds the wobble that
-   * keeps it from nesting inside its neighbours. Rendering seven layers instead
-   * of eighteen therefore did not thin the mark, it built a different one,
-   * seven layers at seven other positions with seven other edges, so lifting
-   * the brush reshuffled every bit of mottling in the interior even with the
-   * seed held fixed. Keeping the loop at its full length and skipping most of
-   * the layers means the ones that do get drawn are the same layers, in the
-   * same places, that the finished mark will have.
-   */
   const lastStamp = Math.max(0, fullStamps - 1)
-  const skip = preview ? Math.max(1, Math.ceil(fullStamps / TUNING.previewStamps)) : 1
-  // The widest layer sets the clip for the pooling, grain and gradient, and the
-  // first past 0.62 is the one the rim is stroked around. Both are drawn
-  // whatever the decimation lands on, so neither moves at the handover.
-  const rimStamp = fullStamps > 1 ? Math.floor(0.62 * lastStamp) + 1 : -1
-  const drawsStamp = (i: number): boolean =>
-    i % skip === 0 || i === lastStamp || i === rimStamp
-  let stamps = 0
-  for (let i = 0; i < fullStamps; i++) if (drawsStamp(i)) stamps++
+  const uniform = context.settle === undefined ? 1 : clamp01(context.settle)
+  const bleed = context.bleed
   /**
-   * Thinning the stack would otherwise thin the paint with it, and the mark
-   * would jump darker the moment the brush lifted. Layers of low-alpha paint
-   * accumulate as 1-(1-a)^n, so raising a in proportion to the layers dropped
-   * lands the preview within a shade or two of the finished mark.
-   */
-  const stampBoost = stamps < fullStamps ? Math.min(2.4, fullStamps / stamps) : 1
-  const settle = context.settle === undefined ? 1 : clamp01(context.settle)
-  /**
-   * The drying, remapped to start where the preview lets go.
+   * The settle averaged over the length.
    *
-   * `settle` runs from WET to 1, because the mark is already visibly on the
-   * paper the moment the brush touches down. That is the right curve for
-   * anything the preview also draws: it is already showing some of the effect,
-   * and the settle carries it the rest of the way. It is the wrong curve for
-   * anything the preview skips, which is absent one frame and then whatever
-   * `settle` happens to be on the next, better than half of it, arriving all
-   * at once, which is the pop you see when the brush lifts. Those passes ramp
-   * on this instead, so they start from nothing at the handover.
+   * Most of what drying does to a mark belongs to the mark as a whole: how dark
+   * the rim has pulled, how much pigment has dropped into the tooth. Those want
+   * one number for the whole thing. Only the spreading is local enough to be
+   * worth asking about point by point, because it is the part you watch happen.
    */
-  const dried = clamp01((settle - WET) / (1 - WET))
+  const settle = bleed
+    ? (() => {
+        let sum = 0
+        for (let i = 0; i < TUNING.bleedSamples; i++) {
+          sum += clamp01(bleed(i / (TUNING.bleedSamples - 1)))
+        }
+        return sum / TUNING.bleedSamples
+      })()
+    : uniform
+  /**
+   * The drying, with zero at the moment the paint lands.
+   *
+   * `settle` starts at WET, not at nothing, because paint is visibly on the
+   * paper as soon as the brush touches it. That is the right zero for how dark
+   * a mark is. It is the wrong zero for the things that develop over the
+   * drying, which have genuinely not started yet when the brush is still
+   * moving: the creep outward into the fibre, the heavy particles dropping into
+   * the tooth, the bloom. Those are asked in terms of this instead.
+   */
+  const driedFrom = (s: number): number => clamp01((s - WET) / (1 - WET))
+  const dried = driedFrom(settle)
   const spreadFull = TUNING.spread * (0.2 + water * 0.8 + wetness * 0.5)
   /**
    * The wash starts as a tight core and creeps out to its full reach.
    *
    * On `dried` rather than `settle`, which is the whole of the creep instead of
-   * the last two fifths of it. Paint under a moving brush has not gone anywhere
-   * yet: it is still the shape of the footprint, and the spreading is what
-   * happens in the seconds afterwards. Ramping from WET meant the mark was
-   * already most of the way out when the brush lifted, so the part you could
-   * actually watch was a few per cent of the brush width, present in the
-   * numbers, invisible on the paper. The dry mark is unchanged; only how far it
-   * travels to get there is.
+   * the last two fifths of it. Ramping from WET meant the mark was already most
+   * of the way out by the time anyone could watch, so the visible travel was a
+   * few per cent of the brush width: present in the numbers, invisible on the
+   * paper. The dry mark is unchanged; only how far it travels to get there is.
    */
   const spread = spreadFull * (0.12 + dried * 0.88)
+  // The same figure, asked about one place on the mark rather than all of it.
+  const spreadAt = bleed
+    ? (u: number): number => spreadFull * (0.12 + driedFrom(clamp01(bleed(u))) * 0.88)
+    : null
   const radius = spanRadius(allPoints)
   // A big wash pools further than a small one, so drift scales with the mark.
   const drift =
@@ -490,7 +489,7 @@ export function renderStroke(
     : Math.max(3, halfWidth * 0.8)
 
   const [rgb, baseAlpha] = pigmentInk(pigment, stroke)
-  const alpha = Math.min(0.92, baseAlpha * stampBoost)
+  const alpha = Math.min(0.92, baseAlpha)
   const falloff = 1.4 + (1 - water) * 2.5
 
   /**
@@ -547,14 +546,18 @@ export function renderStroke(
       // same side stays soft through every stamp and the eye reads one edge
       // rather than a shimmer.
       const phase = (stroke.seed % 1000) / 1000 * Math.PI * 2 + r * 1.7
+      // A filled wash has no along-the-line to vary over. It is a shape, not a
+      // pull, so it keeps the averaged spread and only the drawn stroke asks
+      // per point.
       let poly = filled
         ? expandVarying(runs[r], 1 + spread * t, TUNING.lostEdges, phase)
         : buildOutline(
             runs[r],
-            halfWidth * (1 + spread * t),
+            halfWidth,
             stroke.kind,
             TUNING.lostEdges * 0.5,
             phase,
+            spreadAt ? (u) => 1 + spreadAt(u) * t : () => 1 + spread * t,
           )
       if (poly.length < 3) continue
 
@@ -578,18 +581,13 @@ export function renderStroke(
 
   for (let i = 0; i < fullStamps; i++) {
     const t = fullStamps === 1 ? 0 : i / lastStamp
+    const polys = stampPolys(t, i)
+    if (polys.length === 0) continue
 
     // A little drift per layer. Without this the interior reads dead flat;
     // with it, the wash pools unevenly the way a real one does.
-    // Drawn onto its own or not, every layer takes its two numbers, so a
-    // skipped one still advances the sequence and the layers that survive the
-    // decimation sit exactly where the full stack would have put them.
     const dx = (jitter() - 0.5) * drift
     const dy = (jitter() - 0.5) * drift
-    if (!drawsStamp(i)) continue
-
-    const polys = stampPolys(t, i)
-    if (polys.length === 0) continue
 
     bctx.save()
     bctx.translate(dx, dy)
@@ -655,15 +653,29 @@ export function renderStroke(
     }
   }
 
-  // Same reasoning: no pigment in suspension, nothing to settle into the tooth.
+  /**
+   * Grain: the mark meeting the tooth of the paper.
+   *
+   * Two things at once, on two clocks. Wet paint finds the hollows in the sheet
+   * the moment the brush puts it there, and that part is there to see straight
+   * away; the heavy particles in a granulating pigment then drop out of
+   * suspension over the drying and deepen it. The floor is the first, `dried`
+   * is the second.
+   *
+   * This pass used to be skipped for the mark under the brush, on the grounds
+   * that it is a clipped pattern fill over the whole mark and so the most
+   * expensive thing here. But it is the pass that makes paint look like paint on
+   * paper rather than ink on glass, and skipping it meant the sheet had no tooth
+   * at all until the brush came up. It costs about what the pooling beside it
+   * costs, and that has always run every frame.
+   */
   const gran =
-    pigment.granulation * context.tooth * TUNING.granulation * (0.2 + load * 0.8) * dried
-  // Granulation is a clipped pattern fill over the whole mark, so it costs the
-  // most of anything here and scales with the area the stroke has reached. It
-  // is also the least visible thing at draft: pigment settling into the tooth
-  // arrives as the wash dries, which is exactly what the settle animation is
-  // already doing in the frames after the brush lifts.
-  if (!preview && gran > 0.06 && widest.length) {
+    pigment.granulation *
+    context.tooth *
+    TUNING.granulation *
+    (0.2 + load * 0.8) *
+    (0.32 + dried * 0.68)
+  if (gran > 0.06 && widest.length) {
     // Each mark gets its own grain orientation, so the tile never lines up
     // with its neighbours into a visible weave.
     const grainAngle = makeRng(stroke.seed ^ 0x6a11)() * Math.PI * 2

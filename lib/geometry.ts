@@ -250,6 +250,15 @@ export function buildOutline(
   kind: BrushKind,
   variance = 0,
   phase = 0,
+  /**
+   * Extra width at this fraction along the centreline, multiplied in.
+   *
+   * The spread of a wet edge is not a property of the mark, it is a property of
+   * a place on the mark: paint laid down two seconds ago has crept further than
+   * paint the brush is still putting down. A scalar half-width cannot say that,
+   * so the caller says it here instead.
+   */
+  gain?: (t: number) => number,
 ): Point[] {
   const n = centre.length
   if (n < 2) return []
@@ -288,7 +297,7 @@ export function buildOutline(
       1 +
       variance *
         (Math.sin(t * 5.2 + phase) * 0.6 + Math.sin(t * 11.3 + phase * 2.1) * 0.4)
-    const w = halfWidth * widthProfile(t, taper) * swell
+    const w = halfWidth * widthProfile(t, taper) * swell * (gain ? gain(t) : 1)
     left.push({ x: centre[i].x + nx * w, y: centre[i].y + ny * w })
     right.push({ x: centre[i].x - nx * w, y: centre[i].y - ny * w })
   }

@@ -49,6 +49,20 @@ function ease(t: number): number {
   return 1 - Math.pow(1 - t, 2.2)
 }
 
+/**
+ * How far a patch of paint of this age has settled, given how wet it went on.
+ *
+ * The same curve the settle clock runs on, exposed because a stroke is not laid
+ * down all at once and so does not dry all at once. While the brush is still
+ * moving the view needs this per point along the mark, not once for the mark,
+ * and after the brush lifts it needs the two to agree exactly or the handover
+ * shows. One function, asked twice.
+ */
+export function settleAtAge(ageMs: number, water: number): number {
+  const t = Math.max(0, Math.min(1, ageMs / settleFor(water)))
+  return WET + (1 - WET) * ease(t)
+}
+
 class Presence {
   private cursors: Record<Who, Cursor> = { human: { ...IDLE }, agent: { ...IDLE } }
   /**

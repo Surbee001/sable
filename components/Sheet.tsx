@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { pointsToPath, resample, sampleSubpaths, type Point } from '@/lib/geometry'
 import { hitTest, selectionOutline } from '@/lib/hit'
-import { presence } from '@/lib/presence'
+import { presence, settleAtAge } from '@/lib/presence'
 import { studio } from '@/lib/store'
 import { useStudio } from '@/lib/useStudio'
 import { BRUSHES, CANVAS_H, CANVAS_W, PAPERS, WET, type Stroke } from '@/lib/types'
@@ -47,6 +47,65 @@ const COMMIT_SAMPLE = 3.5
  * it never waits on a React render, and it never waits on a wash being redrawn.
  */
 
+/** Places along a mark at which its age is recorded. */
+const BLEED_SAMPLES = 24
+
+/**
+ * When each place along a mark was laid down, indexed by fraction of its length.
+ *
+ * Arc-length fraction rather than sample index, because that is the one
+ * parameterisation that survives what happens to the points afterwards: the
+ * committed path resamples them and the renderer resamples them again, so an
+ * index means something different at every stage, but "a third of the way
+ * along" does not.
+ */
+function laidProfile(points: Point[], times: number[]): Float64Array {
+  const out = new Float64Array(BLEED_SAMPLES)
+  const n = Math.min(points.length, times.length)
+  if (n === 0) return out
+  if (n === 1) {
+    out.fill(times[0])
+    return out
+  }
+
+  const cum = new Float64Array(n)
+  for (let i = 1; i < n; i++) {
+    cum[i] = cum[i - 1] + Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y)
+  }
+  const total = cum[n - 1]
+  // A mark with no length is a click, and every part of it is the same age.
+  if (total <= 0) {
+    out.fill(times[n - 1])
+    return out
+  }
+
+  let j = 0
+  for (let k = 0; k < BLEED_SAMPLES; k++) {
+    const target = (k / (BLEED_SAMPLES - 1)) * total
+    while (j < n - 2 && cum[j + 1] < target) j++
+    const seg = cum[j + 1] - cum[j]
+    const f = seg <= 0 ? 0 : (target - cum[j]) / seg
+    out[k] = times[j] + (times[j + 1] - times[j]) * f
+  }
+  return out
+}
+
+/**
+ * How far the mark has bled at a fraction along it, as of `now`.
+ *
+ * A table lookup rather than a search: the renderer asks this a few thousand
+ * times a frame, once per point per pigment layer, and it is on the path that
+ * has to keep up with the hand.
+ */
+function bleedFrom(laid: Float64Array, water: number, now: number): (u: number) => number {
+  return (u) => {
+    const x = Math.max(0, Math.min(1, u)) * (BLEED_SAMPLES - 1)
+    const i = Math.min(BLEED_SAMPLES - 2, Math.floor(x))
+    const at = laid[i] + (laid[i + 1] - laid[i]) * (x - i)
+    return settleAtAge(now - at, water)
+  }
+}
+
 function themeInk(): { accent: string; agent: string; guide: string } {
   const s = getComputedStyle(document.documentElement)
   return {
@@ -70,6 +129,8 @@ export function Sheet() {
   const groundRef = useRef('')
   const drawingRef = useRef<{
     points: Point[]
+    /** When each point was laid down, parallel to `points`. */
+    times: number[]
     raw: Point | null
     /**
      * Rolled when the brush goes down, not when the mark is committed.
@@ -88,6 +149,14 @@ export function Sheet() {
   const dragRef = useRef<{ last: Point; moved: number; ids: string[] } | null>(null)
   const flashRef = useRef<{ ids: string[]; at: number } | null>(null)
   const fxFrameRef = useRef(0)
+  /**
+   * The age profile of each mark still drying, by stroke id.
+   *
+   * A map rather than one slot, because a mark laid over another that has not
+   * finished drying is the normal case, and the older one has to keep its own
+   * profile or it would fall back to a single clock partway through and jump.
+   */
+  const settleProfilesRef = useRef(new Map<string, Float64Array>())
   const [, tick] = useState(0)
 
   /* ---------------- sizing ---------------- */
@@ -198,10 +267,50 @@ export function Sheet() {
     const tooth = PAPERS[current.paper].tooth
     const layerOf = new Map(current.layers.map((l) => [l.id, l]))
 
-    ctx.setTransform(1, 0, 0, 1, 0, 0)
-    ctx.clearRect(0, 0, size.w, size.h)
+    const now = performance.now()
+    const profiles = settleProfilesRef.current
+    for (const id of profiles.keys()) {
+      if (presence.isSettled(id)) profiles.delete(id)
+    }
 
     const settling = presence.settlingIds
+    const live = presence.inProgress
+    const drawing = drawingRef.current
+    const wet =
+      settling.length > 0 ||
+      (live !== null && live.points.length > 1) ||
+      (drawing !== null && drawing.points.length > 1)
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    if (!wet) {
+      ctx.clearRect(0, 0, size.w, size.h)
+      return
+    }
+
+    /**
+     * The dry sheet, copied in, so a wet mark multiplies into the very pixels it
+     * is about to be baked into.
+     *
+     * This layer used to be transparent and carry `mix-blend-mode: multiply`,
+     * leaving the browser to blend it with the sheet below. The arithmetic is
+     * the same on paper, but it is not the same arithmetic: canvas multiplies in
+     * sRGB, and CSS blends in whatever space the compositor is working in, which
+     * on a wide-gamut display is not sRGB. Multiply is per-channel and
+     * non-linear, so the two agree over near-white paper and diverge exactly
+     * where the operation does the most work, which is a dark mark laid over
+     * another dark mark. That is the jump: the overlap was blended one way while
+     * it was wet and another way once it dried. Doing both in canvas means there
+     * is only one way.
+     */
+    const dry = mainRef.current
+    if (dry && dry.width === size.w && dry.height === size.h) {
+      ctx.globalCompositeOperation = 'copy'
+      ctx.drawImage(dry, 0, 0)
+      ctx.globalCompositeOperation = 'source-over'
+    } else {
+      ctx.clearRect(0, 0, size.w, size.h)
+    }
+
     if (settling.length > 0) {
       const byId = new Map(current.strokes.map((s) => [s.id, s]))
       for (const id of settling) {
@@ -216,6 +325,12 @@ export function Sheet() {
             wetness: layerOf.get(stroke.layerId)?.wetness ?? 0,
             tooth,
             settle: presence.settleProgress(id),
+            // Its own profile if the hand drew it, so the head of the mark
+            // carries on from where it had already got to rather than being
+            // pulled back to share one clock with the tail.
+            bleed: profiles.has(id)
+              ? bleedFrom(profiles.get(id)!, stroke.water, now)
+              : undefined,
           },
           sx,
           sy,
@@ -226,7 +341,6 @@ export function Sheet() {
     // The agent's line, as far as it has got. Rendered every frame so the mark
     // comes out from under its cursor rather than arriving complete once the
     // cursor has stopped moving.
-    const live = presence.inProgress
     if (live && live.points.length > 1) {
       const stroke = current.strokes.find((s) => s.id === live.id)
       if (stroke) {
@@ -247,7 +361,6 @@ export function Sheet() {
                 ? [...live.points, live.points[0]]
                 : live.points,
             ],
-            preview: true,
           },
           sx,
           sy,
@@ -258,7 +371,6 @@ export function Sheet() {
     // The mark in progress, painted for real rather than outlined. A dashed
     // line looks like a selection lasso, and watercolour never behaves the way
     // an outline suggests it will.
-    const drawing = drawingRef.current
     if (drawing && drawing.points.length > 1) {
       const brush = studio.getUi().brush
       const layer = studio.getLayer(studio.getUi().activeLayerId)
@@ -287,12 +399,12 @@ export function Sheet() {
           wetness: layer?.wetness ?? 0,
           tooth,
           settle: WET,
+          bleed: bleedFrom(laidProfile(drawing.points, drawing.times), brush.water, now),
           centre: [
             brush.fill && drawing.points.length > 2
               ? [...drawing.points, drawing.points[0]]
               : drawing.points,
           ],
-          preview: true,
         },
         sx,
         sy,
@@ -573,7 +685,14 @@ export function Sheet() {
         return
       }
 
-      drawingRef.current = { points: [pt], raw: pt, seed: Math.floor(Math.random() * 1e9) }
+      drawingRef.current = {
+        points: [pt],
+        // The paint starts drying the instant it touches the paper, not when
+        // the mark is finished, so the clock starts here.
+        times: [performance.now()],
+        raw: pt,
+        seed: Math.floor(Math.random() * 1e9),
+      }
       pumpFx()
     },
     [pumpFx, scene, toSheet, ui.mode, ui.selection],
@@ -618,6 +737,7 @@ export function Sheet() {
         ? batch.map((m) => toClientSheet(m.clientX, m.clientY, e.currentTarget))
         : [pt]
 
+      const laidAt = performance.now()
       for (const raw of moves) {
         // One pole of exponential smoothing. The hand shakes, and a digitiser
         // quantises what is left, so the raw track has a wobble on it at a
@@ -636,6 +756,7 @@ export function Sheet() {
         const last = drawing.points[drawing.points.length - 1]
         if (Math.hypot(smoothed.x - last.x, smoothed.y - last.y) < MIN_SAMPLE) continue
         drawing.points.push(smoothed)
+        drawing.times.push(laidAt)
       }
       pumpFx()
     },
@@ -663,7 +784,7 @@ export function Sheet() {
       const points = resample(drawing.points, COMMIT_SAMPLE)
       if (points.length >= 2) {
         const brush = studio.getUi().brush
-        studio.paint(
+        const laid = studio.paint(
           {
             path: pointsToPath(points) + (brush.fill ? ' Z' : ''),
             fill: brush.fill,
@@ -671,6 +792,12 @@ export function Sheet() {
           },
           'human',
         )
+        // Handed over rather than restarted. The tail was laid at this instant
+        // and has the whole settle ahead of it, which is exactly the window
+        // presence just opened; the head is most of the way through its own and
+        // keeps going. The trailing drawFx below is what puts this on screen,
+        // so the frame paint() drew synchronously is never the one you see.
+        settleProfilesRef.current.set(laid.id, laidProfile(drawing.points, drawing.times))
       }
     }
     drawFx()
@@ -705,7 +832,7 @@ export function Sheet() {
     <div ref={wrapRef}>
       <div className="sheet-frame">
         <canvas ref={mainRef} className="sheet-layer" />
-        <canvas ref={fxRef} className="sheet-layer sheet-layer--wash" />
+        <canvas ref={fxRef} className="sheet-layer" />
         <canvas ref={uiRef} className="sheet-layer" />
         <canvas
           ref={cursorRef}
