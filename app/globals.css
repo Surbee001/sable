@@ -721,24 +721,47 @@ body {
   gap: 4px;
 }
 
+/*
+   The button is the hit target and the tooltip's host, and carries no paint of
+   its own. The dot inside is the colour and does the growing.
+
+   Splitting them is not decoration. A tooltip in a .tip-group is positioned
+   against the group, which is why the button is left `position: static` and the
+   text can span the full width of the rail. But a transform on an element makes
+   it the containing block for absolutely positioned descendants, including its
+   own ::after, so scaling the swatch on hover quietly re-anchored its tooltip
+   from the 200px row to the 24px dot: the text reflowed into a narrow column
+   under the circle, took the 1.16 scale with it, and lost its z-index to the
+   new stacking context. All of it only on hover, which is the only time a
+   tooltip is shown. Keep transforms off anything carrying data-tip.
+*/
 .swatch {
+  display: block;
   aspect-ratio: 1;
   width: 100%;
   padding: 0;
   border: 0;
   border-radius: 50%;
+  background: none;
   cursor: pointer;
+}
+
+.swatch-dot {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
   box-shadow:
     inset 0 0 0 0.5px rgba(0, 0, 0, 0.22),
     inset 0 -1px 2px rgba(0, 0, 0, 0.18);
   transition: transform 0.16s var(--ease);
 }
 
-.swatch:hover {
+.swatch:hover .swatch-dot {
   transform: scale(1.16);
 }
 
-.swatch--on {
+.swatch--on .swatch-dot {
   box-shadow:
     inset 0 0 0 0.5px rgba(0, 0, 0, 0.22),
     0 0 0 2px var(--bg),

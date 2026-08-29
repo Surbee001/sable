@@ -60,10 +60,10 @@ export function Inspector() {
               aria-label={p.name}
               title={p.name}
               onClick={() => studio.updateMany(ids, { pigment: p.id }, 'human')}
-              className={`swatch pig-${p.id}${
-                !many && p.id === first.pigment ? ' swatch--on' : ''
-              }`}
-            />
+              className={`swatch${!many && p.id === first.pigment ? ' swatch--on' : ''}`}
+            >
+              <span className={`swatch-dot pig-${p.id}`} />
+            </button>
           ))}
         </div>
         {!many ? <span className="note">{getPigment(first.pigment).name}</span> : null}

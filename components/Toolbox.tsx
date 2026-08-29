@@ -84,8 +84,10 @@ export function Toolbox() {
                     : 'Even in a wash.'
               }`}
               onClick={() => studio.setBrush({ pigment: p.id })}
-              className={`swatch pig-${p.id}${p.id === brush.pigment ? ' swatch--on' : ''}`}
-            />
+              className={`swatch${p.id === brush.pigment ? ' swatch--on' : ''}`}
+            >
+              <span className={`swatch-dot pig-${p.id}`} />
+            </button>
           ))}
         </div>
         <span className="pigment-name">{pigment.name}</span>
