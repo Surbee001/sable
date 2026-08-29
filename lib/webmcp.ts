@@ -339,6 +339,21 @@ function coreTools(): ToolDef[] {
         'Staining ones (phthalo blue, quinacridone rose) stay smooth and hold a hard edge.\n' +
         '  • Painting on a wet layer bleeds outward. The lowest layer is the wettest.\n' +
         '  • Leave paper white. Untouched sheet is the only true highlight you get.\n\n' +
+        'HOW A PAINTING IS BUILT. Not one call, but four or five, in this order:\n' +
+        '  1. The ground. Two or three enormous, almost colourless washes on the wettest ' +
+        'layer, water above 0.9 and load under 0.2. They set the light for everything after.\n' +
+        '  2. The big shapes. Land, water, the mass of a tree. Still wet, still pale, still ' +
+        'few. Most of the picture should be decided by now.\n' +
+        '  3. The middle. Stronger, smaller, on a drier layer. This is where the subject ' +
+        'actually appears.\n' +
+        '  4. The dark. One small area at load 0.8 or above and water under 0.35. Only one. ' +
+        'It is what makes everything else read as light.\n' +
+        '  5. The marks. A handful of thin lines at most: a mast, a stem, a bird. Stop early.\n\n' +
+        'RUN THE BIG SHAPES OFF THE EDGE OF THE SHEET. A wash for a sky or a field should ' +
+        'start at x -40 and end at 1040, not at 0 and 1000. A large shape that floats with ' +
+        'clear paper all the way round it reads as a sticker; the same shape running off ' +
+        'three edges reads as a place. This is the single most common way a picture built ' +
+        'from good marks still comes out looking assembled.\n\n' +
         'WHAT SEPARATES A PAINTING FROM A DIAGRAM. Read this before a first pass:\n' +
         '  • Use three or four pigments for the whole picture, not twelve. Call suggest_palette ' +
         'and stay inside what it gives you. Nothing makes an image read as generated faster ' +
@@ -353,7 +368,10 @@ function coreTools(): ToolDef[] {
         '  • Let shapes overlap and run together. Marks that each sit in their own space read ' +
         'as clip art; a petal that bleeds into the one behind it reads as paint.\n' +
         '  • Avoid symmetry and even spacing. Odd numbers, uneven gaps, one element larger ' +
-        'and closer than the rest.\n\n' +
+        'and closer than the rest.\n' +
+        '  • Do not draw a circle for a sun or a rectangle for a sky. A perfect primitive is ' +
+        'the one shape watercolour cannot make. Give every silhouette an uneven contour and ' +
+        'let opposite sides differ.\n\n' +
         'Pass several strokes at once. A whole passage in one call lands as one undoable action, ' +
         'and reads to the human as one deliberate move rather than a twitchy stream.',
       inputSchema: {

@@ -152,6 +152,19 @@ export function assess(scene: Scene): Assessment {
       'Every part of the sheet has paint on it. Untouched paper is the only true highlight available, so consider lifting something rather than adding.',
     )
   }
+  // A picture assembled from marks that each sit clear of the edges reads as a
+  // diagram of a scene rather than a view of one, however well each mark is
+  // made. Cheap to detect and one of the most common faults.
+  const touchesEdge = strokes.some((stroke) => {
+    const b = summariseStroke(scene, stroke).bounds
+    return b.x <= 2 || b.y <= 2 || b.x + b.w >= CANVAS_W - 2 || b.y + b.h >= CANVAS_H - 2
+  })
+  if (!touchesEdge && strokes.length > 3) {
+    suggestions.push(
+      'Every mark stops short of the edges, so the picture reads as objects arranged on paper rather than a view. Take the largest washes out past the edge of the sheet: start them around x -40 and end them past 1040.',
+    )
+  }
+
   if (human === 0) {
     suggestions.push(
       'Everything here is yours. Leave somewhere obvious for the human to work into.',

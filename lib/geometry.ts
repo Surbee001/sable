@@ -248,6 +248,8 @@ export function buildOutline(
   centre: Point[],
   halfWidth: number,
   kind: BrushKind,
+  variance = 0,
+  phase = 0,
 ): Point[] {
   const n = centre.length
   if (n < 2) return []
@@ -279,7 +281,14 @@ export function buildOutline(
     }
 
     const t = i / (n - 1)
-    const w = halfWidth * widthProfile(t, taper)
+    // The brush does not hold the same load from end to end, so the mark swells
+    // and starves along its length. Without this a stroke is a ribbon of
+    // constant width with tapered ends, which is a shape, not a brushmark.
+    const swell =
+      1 +
+      variance *
+        (Math.sin(t * 5.2 + phase) * 0.6 + Math.sin(t * 11.3 + phase * 2.1) * 0.4)
+    const w = halfWidth * widthProfile(t, taper) * swell
     left.push({ x: centre[i].x + nx * w, y: centre[i].y + ny * w })
     right.push({ x: centre[i].x - nx * w, y: centre[i].y - ny * w })
   }
@@ -329,6 +338,49 @@ export function deform(
     }
   }
   return out
+}
+
+/**
+ * Push a polygon outward from its centroid by an amount that varies around it.
+ *
+ * This is what painters call lost and found edges, and it is most of the
+ * difference between a shape that looks painted and one that looks filled. A
+ * wash does not meet the paper the same way all the way round: on one side the
+ * water was still running and the edge dissolves into nothing, on another it
+ * had already set and the edge is crisp. Spreading a shape by one uniform
+ * amount gives every part of its perimeter the same character, which reads as a
+ * sticker however ragged you make it.
+ *
+ * `variance` is how much the spread swings between the tight parts and the
+ * dissolved ones. Two or three slow waves around the ring, so the effect reads
+ * as one side of the mark rather than as a wobble.
+ */
+export function expandVarying(
+  poly: Point[],
+  scale: number,
+  variance: number,
+  phase: number,
+): Point[] {
+  if (poly.length === 0) return poly
+  let cx = 0
+  let cy = 0
+  for (const p of poly) {
+    cx += p.x
+    cy += p.y
+  }
+  cx /= poly.length
+  cy /= poly.length
+
+  const n = poly.length
+  return poly.map((p, i) => {
+    const a = (i / n) * Math.PI * 2
+    // Two harmonics at an irrational ratio, so the swell never repeats
+    // symmetrically and no mark comes out looking deliberately lobed.
+    const swell =
+      Math.sin(a * 2 + phase) * 0.6 + Math.sin(a * 3.7 + phase * 1.7) * 0.4
+    const local = scale + (scale - 1) * swell * variance
+    return { x: cx + (p.x - cx) * local, y: cy + (p.y - cy) * local }
+  })
 }
 
 /** Push a polygon outward from its centroid, the way a wet edge spreads. */

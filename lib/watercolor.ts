@@ -4,6 +4,7 @@ import {
   buildOutline,
   deform,
   expand,
+  expandVarying,
   makeRng,
   resample,
   sampleSubpaths,
@@ -74,6 +75,30 @@ const TUNING = {
   /** Water pushing dried pigment outward into a cauliflower. */
   bloom: 0.85,
   /**
+   * Pooling.
+   *
+   * A wash does not dry to one value. The sheet is never perfectly flat, the
+   * water finds the low places, and pigment ends up gathered in some parts of a
+   * shape and thin in others. Nothing else in this renderer produces that, and
+   * without it a flooded shape is a single uniform colour, which is the
+   * clearest possible tell that it was computed rather than poured. Scaled to
+   * the mark rather than the sheet, so a petal and a sky both get a handful of
+   * pools across them instead of the petal getting a fragment of one.
+   */
+  pooling: 0.42,
+  /** Roughly how many pools across the longest edge of a mark. */
+  poolsAcross: 2.6,
+  /**
+   * Lost and found edges.
+   *
+   * How much the spread swings between the parts of a perimeter that stayed
+   * tight and the parts that dissolved. This is most of what separates a shape
+   * that looks painted from one that looks filled, so it is worth rather more
+   * than it looks: at zero, every mark in the picture meets the paper the same
+   * way all the way round, which no wash has ever done.
+   */
+  lostEdges: 0.62,
+  /**
    * Pigment separation.
    *
    * Real paint is a suspension of particles that do not travel together, so a
@@ -137,17 +162,28 @@ function noiseTile(
     for (let i = 0; i < grid.length; i++) grid[i] = rng()
     const at = (ix: number, iy: number) =>
       grid[(((iy % freq) + freq) % freq) * freq + (((ix % freq) + freq) % freq)]
+    // Offset each octave by its own fraction of a cell. The tempting fix for a
+    // visible lattice is to rotate the sample coordinates, but the wrap that
+    // makes this tile depends on x and y mapping straight onto the lattice, so
+    // rotating breaks the seam and every tile edge shows as a hard rectangle.
+    // Shifting instead keeps the tile whole and still stops the octaves from
+    // lining up their cell boundaries into a weave.
+    const shiftX = (freq * 0.61803398875) % 1
+    const shiftY = (freq * 0.41421356237) % 1
+
     return {
       weight,
       sample(x: number, y: number) {
-        const fx = (x / size) * freq
-        const fy = (y / size) * freq
+        const fx = (x / size) * freq + shiftX
+        const fy = (y / size) * freq + shiftY
         const x0 = Math.floor(fx)
         const y0 = Math.floor(fy)
         const tx = fx - x0
         const ty = fy - y0
-        const sx = tx * tx * (3 - 2 * tx)
-        const sy = ty * ty * (3 - 2 * ty)
+        // Quintic rather than cubic: its second derivative vanishes at the
+        // lattice points too, so the cell boundaries stop showing as creases.
+        const sx = tx * tx * tx * (tx * (tx * 6 - 15) + 10)
+        const sy = ty * ty * ty * (ty * (ty * 6 - 15) + 10)
         const a = at(x0, y0) * (1 - sx) + at(x0 + 1, y0) * sx
         const b = at(x0, y0 + 1) * (1 - sx) + at(x0 + 1, y0 + 1) * sx
         return a * (1 - sy) + b * sy
@@ -176,6 +212,7 @@ function noiseTile(
 
 let paperTile: HTMLCanvasElement | null = null
 let granTile: HTMLCanvasElement | null = null
+let poolTile: HTMLCanvasElement | null = null
 
 /** Fine, low-contrast tooth for the blank sheet. */
 function getPaperTile(): HTMLCanvasElement {
@@ -217,6 +254,29 @@ function getGranulationTile(): HTMLCanvasElement {
     },
   )
   return granTile
+}
+
+/**
+ * Broad, soft, high-contrast variation: where the water gathered and where it
+ * ran thin. Deliberately low frequency, because this is the shape of a puddle
+ * rather than the grain of the paper.
+ */
+function getPoolTile(): HTMLCanvasElement {
+  poolTile ??= noiseTile(
+    256,
+    [
+      [2, 0.5, 20260829],
+      [4, 0.3, 771],
+      [9, 0.2, 4242],
+    ],
+    (n) => {
+      // Widen the middle so most of the shape sits near its stated value and
+      // the pooling reads as a few deep places, not as general noise.
+      const s = Math.max(0, Math.min(1, (n - 0.28) / 0.44))
+      return 0.34 + s * s * (3 - 2 * s) * 0.66
+    },
+  )
+  return poolTile
 }
 
 /** Paint the blank sheet: base tone, tooth, and a whisper of cockling. */
@@ -436,14 +496,30 @@ export function renderStroke(
   const stampPolys = (t: number, index: number): Point[][] => {
     const out: Point[][] = []
     for (let r = 0; r < runs.length; r++) {
+      // Where this mark dissolves and where it holds. Fixed per stroke, so the
+      // same side stays soft through every stamp and the eye reads one edge
+      // rather than a shimmer.
+      const phase = (stroke.seed % 1000) / 1000 * Math.PI * 2 + r * 1.7
       let poly = filled
-        ? expand(runs[r], 1 + spread * t)
-        : buildOutline(runs[r], halfWidth * (1 + spread * t), stroke.kind)
+        ? expandVarying(runs[r], 1 + spread * t, TUNING.lostEdges, phase)
+        : buildOutline(
+            runs[r],
+            halfWidth * (1 + spread * t),
+            stroke.kind,
+            TUNING.lostEdges * 0.5,
+            phase,
+          )
       if (poly.length < 3) continue
 
-      // Coarse wobble is shared so the stamps read as one wash...
+      // Coarse wobble is mostly shared, so the stamps still read as one wash,
+      // but not identically: stamps deformed the same way and then expanded are
+      // exact concentric copies, and the eye reads a stack of those as contour
+      // lines on a map rather than as an edge. A little divergence per stamp is
+      // what makes them cross instead of nest.
       const coarse = makeRng(stroke.seed + r * 31)
       poly = deform(poly, rough * 0.5, coarse, maxDisp)
+      const wander = makeRng(stroke.seed + r * 31 + index * 5209)
+      poly = deform(poly, rough * 0.34, wander, maxDisp * 0.75)
       // ...fine detail diverges, so they never stack into a hard vector edge.
       const fine = makeRng(stroke.seed + r * 31 + 977 * (index + 1))
       poly = deform(poly, rough * 0.72, fine, maxDisp * 0.6)
@@ -468,8 +544,7 @@ export function renderStroke(
     bctx.globalAlpha = alpha * (1 - t * 0.5)
     bctx.beginPath()
     for (const poly of polys) addPolygon(bctx, poly)
-    // evenodd so a path that encloses a hole paints a ring, not a disc.
-    bctx.fill('evenodd')
+    bctx.fill(rule)
     bctx.restore()
 
     if (t > 0.62 && !rimPolys) rimPolys = polys
@@ -505,6 +580,29 @@ export function renderStroke(
   }
 
   // Granulation: heavy particles drop into the valleys of the tooth.
+  // Pooling. Laid before the granulation so the heavy particles settle into a
+  // wash that already has deep and thin places, rather than onto a flat one.
+  if (widest.length && settle > 0.15) {
+    const b = boundsOf(widest.flat())
+    const span = Math.max(b.w, b.h) / TUNING.poolsAcross
+    const angle = makeRng(stroke.seed ^ 0x4f00)() * Math.PI * 2
+    const pattern = scaledPattern(bctx, getPoolTile(), Math.max(24, span), angle)
+    if (pattern) {
+      bctx.save()
+      bctx.beginPath()
+      for (const poly of widest) addPolygon(bctx, poly)
+      bctx.clip(rule)
+      bctx.globalCompositeOperation = 'multiply'
+      bctx.globalAlpha = Math.min(
+        0.9,
+        TUNING.pooling * (0.35 + water * 0.65) * (0.4 + load * 0.6) * settle,
+      )
+      bctx.fillStyle = pattern
+      bctx.fillRect(b.x - 4, b.y - 4, b.w + 8, b.h + 8)
+      bctx.restore()
+    }
+  }
+
   // Same reasoning: no pigment in suspension, nothing to settle into the tooth.
   const gran =
     pigment.granulation * context.tooth * TUNING.granulation * (0.2 + load * 0.8) * settle
@@ -564,7 +662,14 @@ export function renderStroke(
   // the buffer is exactly what destination-out does.
   // A bloom needs the wash to have begun setting before water can push it.
   if (water > 0.62 && settle > 0.72 && widest.length) {
-    applyBloom(bctx, widest.flat(), stroke.seed, water, TUNING.bloom)
+    applyBloom(
+      bctx,
+      widest.flat(),
+      stroke.seed,
+      water,
+      TUNING.bloom,
+      `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`,
+    )
   }
 
   // A dry brush skips across the tooth instead of flooding it.
@@ -585,36 +690,94 @@ export function renderStroke(
 }
 
 /** Lift pigment back out of a wet wash to leave a pale cauliflower edge. */
+/**
+ * A backrun, which is not a soft glow.
+ *
+ * Drop clean water into a wash that has started to set and it shoves the
+ * pigment ahead of it, leaving a pale patch fenced by a darker, distinctly
+ * hard, distinctly wandering line. Painters call the result a cauliflower and
+ * spend years learning to want it. Rendering it as a radial gradient produces a
+ * lens flare in the middle of the sky instead, so the shape is built as an
+ * irregular polygon: clear in the middle, hard at the boundary, with the lifted
+ * pigment banked up just outside it.
+ */
 function applyBloom(
   bctx: CanvasRenderingContext2D,
   poly: Point[],
   seed: number,
   water: number,
   strength: number,
+  ink: string,
 ): void {
   const rng = makeRng(seed ^ 0xb100)
   const b = boundsOf(poly)
-  const count = Math.round(1 + rng() * 2 * water)
-  bctx.save()
-  bctx.globalCompositeOperation = 'destination-out'
+  const across = Math.min(b.w, b.h)
+  if (across < 30) return
+
+  // Not every wet wash backruns, and one that does usually does it once. Making
+  // it happen every time turned the sky into a field of splats.
+  if (rng() > 0.34 + water * 0.4) return
+
+  const lift = Math.min(0.34, strength * (water - 0.6) * 0.85)
+  if (lift < 0.03) return
+
+  const count = rng() < 0.75 ? 1 : 2
   for (let i = 0; i < count; i++) {
-    const cx = b.x + b.w * (0.25 + rng() * 0.5)
-    const cy = b.y + b.h * (0.25 + rng() * 0.5)
-    const r = Math.min(b.w, b.h) * (0.16 + rng() * 0.24)
-    if (r < 3) continue
-    const g = bctx.createRadialGradient(cx, cy, 0, cx, cy, r)
-    const a = strength * (water - 0.6) * 1.4
-    g.addColorStop(0, `rgba(0,0,0,${Math.min(0.8, a).toFixed(3)})`)
-    g.addColorStop(0.55, `rgba(0,0,0,${Math.min(0.5, a * 0.55).toFixed(3)})`)
+    const cx = b.x + b.w * (0.2 + rng() * 0.6)
+    const cy = b.y + b.h * (0.2 + rng() * 0.6)
+    const r = Math.min(across * (0.12 + rng() * 0.18), 54)
+    if (r < 8) continue
+
+    // Enough sides that the boundary wanders rather than spikes. The earlier
+    // version used eighteen with heavy wobble and produced starbursts.
+    const sides = 44
+    const squash = 0.66 + rng() * 0.42
+    const tilt = rng() * Math.PI
+    const lobe = 0.72 + rng() * 0.3
+    const ring: Point[] = []
+    for (let k = 0; k < sides; k++) {
+      const a = (k / sides) * Math.PI * 2
+      const wobble =
+        1 + Math.sin(a * 3 + tilt) * 0.16 * lobe + Math.sin(a * 7 + tilt * 2) * 0.09
+      const px = Math.cos(a) * r * wobble
+      const py = Math.sin(a) * r * squash * wobble
+      ring.push({
+        x: cx + px * Math.cos(tilt) - py * Math.sin(tilt),
+        y: cy + px * Math.sin(tilt) + py * Math.cos(tilt),
+      })
+    }
+
+    // Irregular where it meets the wash, soft where it fades. Clipping a
+    // radial falloff to the wandering outline gives both; a bare polygon fill
+    // gives a hole with a cut edge, and a bare gradient gives a lens flare.
+    bctx.save()
+    tracePolygon(bctx, ring)
+    bctx.clip()
+    bctx.globalCompositeOperation = 'destination-out'
+    const g = bctx.createRadialGradient(cx, cy, r * 0.15, cx, cy, r)
+    g.addColorStop(0, `rgba(0,0,0,${lift.toFixed(3)})`)
+    g.addColorStop(0.7, `rgba(0,0,0,${(lift * 0.8).toFixed(3)})`)
     g.addColorStop(1, 'rgba(0,0,0,0)')
     bctx.globalAlpha = 1
     bctx.fillStyle = g
-    bctx.beginPath()
-    bctx.ellipse(cx, cy, r, r * (0.7 + rng() * 0.5), rng() * Math.PI, 0, Math.PI * 2)
-    bctx.fill()
+    bctx.fillRect(cx - r * 1.6, cy - r * 1.6, r * 3.2, r * 3.2)
+    bctx.restore()
+
+    // The pigment the water pushed ahead of it, banked against the boundary.
+    // Faint: it is a tide line, not an outline.
+    bctx.save()
+    bctx.globalCompositeOperation = 'multiply'
+    bctx.globalAlpha = Math.min(0.2, lift * 0.5)
+    bctx.strokeStyle = ink
+    bctx.lineWidth = 1 + r * 0.03
+    bctx.lineJoin = 'round'
+    tracePolygon(bctx, ring)
+    bctx.stroke()
+    bctx.restore()
   }
-  bctx.restore()
 }
+
+
 
 /**
  * Break the stroke up along its own direction so a dry brush reads as a brush
