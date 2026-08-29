@@ -44,6 +44,18 @@ function settleFor(water: number): number {
   return 620 + water * 900
 }
 
+/**
+ * How developed a mark looks the instant it is laid down.
+ *
+ * The brush is on the paper and the paint is visibly there, so this is not
+ * zero. Starting the drying animation from zero meant a stroke you had just
+ * watched yourself draw dropped almost out of sight the moment you lifted the
+ * brush, then built back up, which reads as the mark appearing after the fact
+ * rather than under your hand. The preview and the first frame of drying have
+ * to be the same picture.
+ */
+export const WET = 0.55
+
 /** Slow at the end, the way a drying edge does. */
 function ease(t: number): number {
   return 1 - Math.pow(1 - t, 2.2)
@@ -131,7 +143,9 @@ class Presence {
   settleProgress(id: string): number {
     const entry = this.settling.get(id)
     if (!entry) return 1
-    return ease(Math.min(1, (performance.now() - entry.at) / entry.duration))
+    const t = ease(Math.min(1, (performance.now() - entry.at) / entry.duration))
+    // Picks up exactly where the mark under the brush left off.
+    return WET + (1 - WET) * t
   }
 
   /** Start a mark wetting into the paper. */

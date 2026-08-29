@@ -48,6 +48,7 @@ const GROUPS: Array<{
     label: 'Setting up',
     Icon: Palette,
     tools: [
+      'how_to_paint',
       'suggest_palette',
       'list_palette',
       'set_brush',

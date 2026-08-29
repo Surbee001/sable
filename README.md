@@ -70,6 +70,7 @@ as the fallback. All of it is in `lib/webmcp.ts`.
 | Tool | What it does |
 | --- | --- |
 | `assess_painting` | **Measures** the sheet and says what it needs next |
+| `how_to_paint` | A worked recipe for a subject: the passes, the numbers, and the trap |
 | `find_strokes` | Finds marks by pigment, author, region or note, without reading everything |
 | `select_strokes` | Highlights marks on the human's screen, to point at something |
 | `set_brush` | Loads the brush the human is holding, and sets their mode |
@@ -177,6 +178,7 @@ lib/
   presence.ts     cursors, and when a mark appears rather than when it exists
   conductor.ts    whose turn it is, without anyone pressing anything
   duet.ts         the score
+  subjects.ts     how particular things are painted, pass by pass
   fallback-context.ts  our own document.modelContext, for when nothing supplies one
   snapshot.ts     offscreen rendering, so tools can return images
 components/       the studio UI

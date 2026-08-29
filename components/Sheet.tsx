@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { pointsToPath, resample, sampleSubpaths, type Point } from '@/lib/geometry'
 import { hitTest, selectionOutline } from '@/lib/hit'
-import { presence } from '@/lib/presence'
+import { presence, WET } from '@/lib/presence'
 import { studio } from '@/lib/store'
 import { useStudio } from '@/lib/useStudio'
 import { BRUSHES, CANVAS_H, CANVAS_W, PAPERS, type Stroke } from '@/lib/types'
@@ -67,14 +67,12 @@ export function Sheet() {
   const [size, setSize] = useState({ w: 0, h: 0 })
 
   const paintedRef = useRef<Stroke[] | null>(null)
+  const groundRef = useRef('')
   const drawingRef = useRef<{ points: Point[]; raw: Point | null } | null>(null)
   const dragRef = useRef<{ last: Point; moved: number; ids: string[] } | null>(null)
   const flashRef = useRef<{ ids: string[]; at: number } | null>(null)
   const fxFrameRef = useRef(0)
-  const sceneRef = useRef(scene)
   const [, tick] = useState(0)
-
-  sceneRef.current = scene
 
   /* ---------------- sizing ---------------- */
 
@@ -119,8 +117,27 @@ export function Sheet() {
     const order = paintOrder(scene).filter((s) => presence.isSettled(s.id))
     const prev = paintedRef.current
 
+    /**
+     * Everything under the marks, as a string.
+     *
+     * Appending only the new strokes is what keeps painting fast, but the test
+     * for whether that is safe was only ever about the strokes. Change the
+     * paper, or a layer's wetness, and the marks are identical, so it decided
+     * there was nothing to do and the sheet kept its old ground until the next
+     * stroke forced a full redraw. Choosing rough paper and watching nothing
+     * happen is a bug you can see.
+     */
+    const ground = `${scene.paper}|${scene.layers
+      .map((l) => `${l.id}:${l.visible ? 1 : 0}:${l.wetness}`)
+      .join(',')}`
+    const groundChanged = ground !== groundRef.current
+    groundRef.current = ground
+
     const isAppend =
-      prev !== null && order.length >= prev.length && prev.every((s, i) => order[i] === s)
+      !groundChanged &&
+      prev !== null &&
+      order.length >= prev.length &&
+      prev.every((s, i) => order[i] === s)
 
     if (isAppend && order.length === prev.length) return
 
@@ -149,7 +166,12 @@ export function Sheet() {
     if (!ctx) return
     const sx = size.w / CANVAS_W
     const sy = size.h / CANVAS_H
-    const current = sceneRef.current
+    // Straight off the store rather than the last rendered snapshot. The two
+    // agree except in the moment that matters most: between a mark being
+    // committed and React committing the render that carries it, where the
+    // preview has already been dropped and the snapshot does not have the
+    // stroke yet, so the mark would blink out for a frame on lift.
+    const current = studio.getScene()
     const tooth = PAPERS[current.paper].tooth
     const layerOf = new Map(current.layers.map((l) => [l.id, l]))
 
@@ -193,7 +215,7 @@ export function Sheet() {
           {
             wetness: layerOf.get(stroke.layerId)?.wetness ?? 0,
             tooth,
-            settle: 0.5,
+            settle: WET,
             // Same reasoning as the human's mark below: these are already
             // points, and re-deriving them through the DOM every frame is what
             // made a long stroke get heavier the longer it went on.
@@ -241,7 +263,7 @@ export function Sheet() {
         {
           wetness: layer?.wetness ?? 0,
           tooth,
-          settle: 0.55,
+          settle: WET,
           centre: [
             brush.fill && drawing.points.length > 2
               ? [...drawing.points, drawing.points[0]]
@@ -293,7 +315,16 @@ export function Sheet() {
     pumpRef.current()
     return () => {
       stop()
+      // Zeroed, not just cancelled. The id is also the "a frame is already
+      // booked" flag that pumpFx checks before scheduling, so leaving a stale
+      // one behind wedges the pump shut: under StrictMode this effect mounts,
+      // tears down and mounts again, and the second pumpFx saw a live-looking
+      // id for a frame that had already been cancelled and returned without
+      // booking anything. Nothing then repainted fx except the one-shot on a
+      // scene change, so a mark stayed invisible until the brush lifted and
+      // only got its wetting-in when the *next* mark landed.
       if (fxFrameRef.current) cancelAnimationFrame(fxFrameRef.current)
+      fxFrameRef.current = 0
     }
   }, [])
 

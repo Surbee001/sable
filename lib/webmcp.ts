@@ -3,6 +3,7 @@ import { ensureModelContext } from './fallback-context'
 import { isValidPath, scalePath } from './geometry'
 import { PIGMENTS, SCHEMES, findScheme, getPigment, resolvePigment } from './palette'
 import { assess } from './assess'
+import { SUBJECTS, findSubject } from './subjects'
 import { describeScene, narrateScene, snapshotRegion, snapshotScene, summariseStroke } from './snapshot'
 import { studio, type PaintInput, type StrokePatch } from './store'
 import { BRUSHES, CANVAS_H, CANVAS_W, PAPERS, type BrushKind, type PaperKind } from './types'
@@ -354,6 +355,8 @@ function coreTools(): ToolDef[] {
         'clear paper all the way round it reads as a sticker; the same shape running off ' +
         'three edges reads as a place. This is the single most common way a picture built ' +
         'from good marks still comes out looking assembled.\n\n' +
+        'If you are painting a recognisable thing, call how_to_paint for it first. It gives ' +
+        'the pass sequence and a path to start from for that subject specifically.\n\n' +
         'WHAT SEPARATES A PAINTING FROM A DIAGRAM. Read this before a first pass:\n' +
         '  • Use three or four pigments for the whole picture, not twelve. Call suggest_palette ' +
         'and stay inside what it gives you. Nothing makes an image read as generated faster ' +
@@ -871,6 +874,59 @@ function coreTools(): ToolDef[] {
           brushes: BRUSH_NAMES.map((k) => ({ id: k, ...BRUSHES[k] })),
           papers: PAPER_NAMES.map((k) => ({ id: k, ...PAPERS[k] })),
         }),
+    },
+
+    {
+      name: 'how_to_paint',
+      description:
+        'How a particular thing is actually painted: how many washes, in what order, at what ' +
+        'strength, what the silhouette does, and the mistake that subject invites.\n\n' +
+        'Call this before painting any recognisable subject. General principles do not survive ' +
+        'a blank sheet: told to keep a limited palette and vary its edges, anyone still paints ' +
+        'a mountain as a triangle and a flower as a fan of even ovals, because the missing ' +
+        'thing is not watercolour in general but how that subject in particular is built. ' +
+        'Each answer is a worked sequence with real numbers and a path to start from, sized to ' +
+        'the whole sheet, so scale and move them to fit what you are making.',
+      annotations: { readOnlyHint: true },
+      inputSchema: {
+        type: 'object',
+        properties: {
+          subject: {
+            type: 'string',
+            description:
+              'What you are painting: mountain, flower, tree, water, sky, field. Plain words ' +
+              'work, so "a range of hills" or "poppies" both land. Omit to list everything.',
+          },
+        },
+      },
+      execute: (input: { subject?: string }) => {
+        const describe = (r: (typeof SUBJECTS)[number]) => ({
+          id: r.id,
+          name: r.name,
+          watchOutFor: r.trap,
+          passes: r.passes,
+        })
+        const found = typeof input?.subject === 'string' ? findSubject(input.subject) : null
+        if (!found) {
+          return say(
+            `Worked recipes for: ${SUBJECTS.map((r) => r.name).join(', ')}. ` +
+              'Ask for one by name. For anything not listed, the nearest one is usually a good ' +
+              'skeleton: almost everything is built back to front, palest first, with one dark ' +
+              'kept until last.',
+            { subjects: SUBJECTS.map(describe) },
+          )
+        }
+        const lines = [
+          `${found.name}.`,
+          `Watch out for: ${found.trap}`,
+          '',
+          ...found.passes.flatMap((pass, i) => [
+            `${i + 1}. ${pass.what}. ${pass.how}`,
+            ...(pass.path ? [`   A path to start from: ${pass.path}`] : []),
+          ]),
+        ]
+        return say(lines.join('\n'), { subject: describe(found) })
+      },
     },
 
     {
