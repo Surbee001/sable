@@ -322,7 +322,7 @@ export function Sheet() {
    * A mark finishing its drying is the one moment both canvases have to change
    * together: fx stops drawing it because it is settled, and main starts.
    * Routing main's half through a React render put the two on different frames,
-   * and whichever landed first was wrong to look at — a frame with the mark on
+   * and whichever landed first was wrong to look at. A frame with the mark on
    * neither canvas reads as a blink, a frame with it on both multiplies the
    * pigment over itself and reads as a thump. Painting them back to back here
    * means the browser only ever sees the pair.

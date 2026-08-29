@@ -428,8 +428,8 @@ export function renderStroke(
    * Every layer's shape comes out of its own index: `t` decides how far it is
    * expanded and how transparent it is, and the index seeds the wobble that
    * keeps it from nesting inside its neighbours. Rendering seven layers instead
-   * of eighteen therefore did not thin the mark, it built a different one —
-   * seven layers at seven other positions with seven other edges — so lifting
+   * of eighteen therefore did not thin the mark, it built a different one,
+   * seven layers at seven other positions with seven other edges, so lifting
    * the brush reshuffled every bit of mottling in the interior even with the
    * seed held fixed. Keeping the loop at its full length and skipping most of
    * the layers means the ones that do get drawn are the same layers, in the
@@ -461,7 +461,7 @@ export function renderStroke(
    * anything the preview also draws: it is already showing some of the effect,
    * and the settle carries it the rest of the way. It is the wrong curve for
    * anything the preview skips, which is absent one frame and then whatever
-   * `settle` happens to be on the next — better than half of it, arriving all
+   * `settle` happens to be on the next, better than half of it, arriving all
    * at once, which is the pop you see when the brush lifts. Those passes ramp
    * on this instead, so they start from nothing at the handover.
    */
@@ -475,7 +475,7 @@ export function renderStroke(
    * yet: it is still the shape of the footprint, and the spreading is what
    * happens in the seconds afterwards. Ramping from WET meant the mark was
    * already most of the way out when the brush lifted, so the part you could
-   * actually watch was a few per cent of the brush width — present in the
+   * actually watch was a few per cent of the brush width, present in the
    * numbers, invisible on the paper. The dry mark is unchanged; only how far it
    * travels to get there is.
    */
@@ -713,7 +713,7 @@ export function renderStroke(
   // the pigment outward into a pale cauliflower. Lifting pigment back out of
   // the buffer is exactly what destination-out does.
   // A bloom needs the wash to have begun setting before water can push it, so
-  // it starts late — but it has to grow rather than switch on. A threshold on
+  // it starts late, but it has to grow rather than switch on. A threshold on
   // `settle` put a finished cauliflower into one frame partway through the
   // drying, which is the same pop the granulation used to make, just later.
   const bloom = clamp01((dried - 0.38) / 0.62)

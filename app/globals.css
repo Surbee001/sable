@@ -254,7 +254,7 @@ body {
  * into it with multiply: paint over paint filters the light twice. A mark still
  * drying lives on its own canvas stacked above, and the browser was compositing
  * that one normally, so the same stroke was blended two different ways either
- * side of the moment it dried — lighter while wet, and noticeably so where it
+ * side of the moment it dried, lighter while wet, and noticeably so where it
  * lapped over a mark already down, then dropping to its real colour on the
  * handover. This is what makes the wet mark and the dry one the same colour.
  */
