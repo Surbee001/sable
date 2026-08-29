@@ -19,6 +19,7 @@ import {
   CANVAS_W,
   PAPERS,
   WET,
+  type MediumEvent,
   type Layer,
   type PaperKind,
   type Scene,
@@ -31,6 +32,15 @@ import {
  * Every constant here was set by rendering a test sheet and looking at it.
  * The named groups map onto real behaviours of the medium.
  * ------------------------------------------------------------------ */
+
+/**
+ * Where along the spread the visible edge of a wash sits.
+ *
+ * The stamps fan outward and fade as they go, so the mark does not end at the
+ * last one. This is the point the drying rim is taken from, and by the same
+ * argument it is the point the mark reads as ending at.
+ */
+const RIM_AT = 0.62
 
 const TUNING = {
   /** Centreline samples used to build the brush footprint. */
@@ -114,12 +124,22 @@ const TUNING = {
   paperSpan: 74,
 }
 
-/** A repeating pattern scaled so its features are the size we actually want. */
+/**
+ * A repeating pattern scaled so its features are the size we actually want.
+ *
+ * The offset matters as much as the angle. Two washes that pick the same
+ * rotation still line their tiles up with each other and with the sheet, and a
+ * texture that starts at the origin every time is a texture the eye can find
+ * the grid of. Shifting each one to its own phase costs nothing and means no
+ * two passages ever repeat together.
+ */
 function scaledPattern(
   ctx: CanvasRenderingContext2D,
   tile: HTMLCanvasElement,
   span: number,
   rotation = 0,
+  offsetX = 0,
+  offsetY = 0,
 ): CanvasPattern | null {
   const pattern = ctx.createPattern(tile, 'repeat')
   if (!pattern) return null
@@ -127,7 +147,7 @@ function scaledPattern(
   const cos = Math.cos(rotation) * k
   const sin = Math.sin(rotation) * k
   try {
-    pattern.setTransform(new DOMMatrix([cos, sin, -sin, cos, 0, 0]))
+    pattern.setTransform(new DOMMatrix([cos, sin, -sin, cos, offsetX, offsetY]))
   } catch {
     // Older engines without CanvasPattern.setTransform still get a valid, if
     // coarser, texture rather than nothing.
@@ -139,7 +159,26 @@ function scaledPattern(
  * Textures
  * ------------------------------------------------------------------ */
 
-/** Multi-octave value noise on a wrapping lattice. */
+/**
+ * Multi-octave gradient noise on a wrapping lattice, with the domain warped.
+ *
+ * Two deliberate choices here, both of them cures for the same disease.
+ *
+ * Gradient rather than value noise. Value noise stores a number at each lattice
+ * point and interpolates between them, so every local maximum and minimum sits
+ * exactly on the grid. Stack a few octaves on one aligned lattice and those
+ * extrema line up into a regular diagonal crosshatch, and the tile stops reading
+ * as paper and starts reading as woven fabric, which is precisely what a large
+ * flat wash made visible. Gradient noise stores a direction instead and is zero
+ * at every lattice point, so the structure has nowhere to pin itself to.
+ *
+ * And the sample coordinates are pushed around by a low-frequency field before
+ * they are used. Warping the domain bends whatever regularity survives into
+ * something organic, and it is the standard cure for exactly this artefact. It
+ * costs the tile nothing: the warp field is built on the same wrapping lattice,
+ * so at x = size it has come back to the value it had at x = 0, and the tile
+ * still meets itself exactly.
+ */
 function noiseTile(
   size: number,
   octaves: Array<[freq: number, weight: number, seed: number]>,
@@ -151,37 +190,60 @@ function noiseTile(
   const ctx = c.getContext('2d')!
   const img = ctx.createImageData(size, size)
 
-  const samplers = octaves.map(([freq, weight, seed]) => {
-    const rng = makeRng(seed)
-    const grid = new Float32Array(freq * freq)
-    for (let i = 0; i < grid.length; i++) grid[i] = rng()
-    const at = (ix: number, iy: number) =>
-      grid[(((iy % freq) + freq) % freq) * freq + (((ix % freq) + freq) % freq)]
-    // Offset each octave by its own fraction of a cell. The tempting fix for a
-    // visible lattice is to rotate the sample coordinates, but the wrap that
-    // makes this tile depends on x and y mapping straight onto the lattice, so
-    // rotating breaks the seam and every tile edge shows as a hard rectangle.
-    // Shifting instead keeps the tile whole and still stops the octaves from
-    // lining up their cell boundaries into a weave.
-    const shiftX = (freq * 0.61803398875) % 1
-    const shiftY = (freq * 0.41421356237) % 1
+  const quintic = (t: number): number => t * t * t * (t * (t * 6 - 15) + 10)
 
+  /** One octave of wrapping gradient noise, returning roughly -1..1. */
+  const gradientOctave = (freq: number, seed: number) => {
+    const rng = makeRng(seed)
+    const gx = new Float32Array(freq * freq)
+    const gy = new Float32Array(freq * freq)
+    for (let i = 0; i < gx.length; i++) {
+      const a = rng() * Math.PI * 2
+      gx[i] = Math.cos(a)
+      gy[i] = Math.sin(a)
+    }
+    const at = (ix: number, iy: number): number =>
+      (((iy % freq) + freq) % freq) * freq + (((ix % freq) + freq) % freq)
+
+    return (fx: number, fy: number): number => {
+      const x0 = Math.floor(fx)
+      const y0 = Math.floor(fy)
+      const tx = fx - x0
+      const ty = fy - y0
+      const sx = quintic(tx)
+      const sy = quintic(ty)
+      const dot = (ix: number, iy: number, dx: number, dy: number): number => {
+        const i = at(ix, iy)
+        return gx[i] * dx + gy[i] * dy
+      }
+      const a = dot(x0, y0, tx, ty) * (1 - sx) + dot(x0 + 1, y0, tx - 1, ty) * sx
+      const b = dot(x0, y0 + 1, tx, ty - 1) * (1 - sx) + dot(x0 + 1, y0 + 1, tx - 1, ty - 1) * sx
+      // Gradient noise peaks near ±0.7; scaled so a single octave spans -1..1.
+      return (a * (1 - sy) + b * sy) * 1.4
+    }
+  }
+
+  // The warp. Low frequency on purpose: this is meant to bend the lattice, not
+  // to add detail of its own, and a fast warp would only trade one regular
+  // texture for another.
+  const warpFreq = 3
+  const warpX = gradientOctave(warpFreq, 0x5eed01)
+  const warpY = gradientOctave(warpFreq, 0x5eed02)
+  /** In lattice cells of the octave being sampled. */
+  const WARP = 0.42
+
+  const samplers = octaves.map(([freq, weight, seed]) => {
+    const noise = gradientOctave(freq, seed)
     return {
       weight,
-      sample(x: number, y: number) {
-        const fx = (x / size) * freq + shiftX
-        const fy = (y / size) * freq + shiftY
-        const x0 = Math.floor(fx)
-        const y0 = Math.floor(fy)
-        const tx = fx - x0
-        const ty = fy - y0
-        // Quintic rather than cubic: its second derivative vanishes at the
-        // lattice points too, so the cell boundaries stop showing as creases.
-        const sx = tx * tx * tx * (tx * (tx * 6 - 15) + 10)
-        const sy = ty * ty * ty * (ty * (ty * 6 - 15) + 10)
-        const a = at(x0, y0) * (1 - sx) + at(x0 + 1, y0) * sx
-        const b = at(x0, y0 + 1) * (1 - sx) + at(x0 + 1, y0 + 1) * sx
-        return a * (1 - sy) + b * sy
+      sample(x: number, y: number): number {
+        const u = x / size
+        const v = y / size
+        const wx = warpX(u * warpFreq, v * warpFreq)
+        const wy = warpY(u * warpFreq, v * warpFreq)
+        // Map to 0..1 here rather than at the end, so `contrast` keeps seeing
+        // the range it was tuned against.
+        return noise(u * freq + wx * WARP, v * freq + wy * WARP) * 0.5 + 0.5
       },
     }
   })
@@ -212,7 +274,7 @@ let poolTile: HTMLCanvasElement | null = null
 /** Fine, low-contrast tooth for the blank sheet. */
 function getPaperTile(): HTMLCanvasElement {
   paperTile ??= noiseTile(
-    256,
+    512,
     [
       [18, 0.44, 1337],
       [46, 0.34, 90210],
@@ -236,7 +298,7 @@ function getGranulationTile(): HTMLCanvasElement {
   // from the tonal gradient and the drift between stamps; if it came from a
   // repeating tile instead, the repeat itself becomes visible as a grid.
   granTile ??= noiseTile(
-    256,
+    512,
     [
       [14, 0.4, 8080],
       [34, 0.36, 31337],
@@ -258,11 +320,16 @@ function getGranulationTile(): HTMLCanvasElement {
  */
 function getPoolTile(): HTMLCanvasElement {
   poolTile ??= noiseTile(
-    256,
+    512,
     [
-      [2, 0.5, 20260829],
-      [4, 0.3, 771],
-      [9, 0.2, 4242],
+      // Not lower than this. A frequency-2 lattice has four gradient points in
+      // the whole tile, so its cells are literally the quadrants of the square
+      // and a wash big enough to show one octave of it shows corners. On a
+      // full-sheet sky, which stretches this tile to about its own width, that
+      // put soft rounded rectangles in the clouds.
+      [4, 0.48, 20260829],
+      [9, 0.32, 771],
+      [19, 0.2, 4242],
     ],
     (n) => {
       // Widen the middle so most of the shape sits near its stated value and
@@ -320,6 +387,21 @@ export function renderPaper(
 export interface StrokeContext {
   wetness: number
   tooth: number
+  /**
+   * The paper's own colour, which is as pale as lifting can get.
+   *
+   * A lift does not go to white, it goes back to the sheet. Defaults to a
+   * warm white when the caller has not said.
+   */
+  paperTone?: string
+  /**
+   * Called with anything the paint does that was not asked for.
+   *
+   * Off by default and absent on every drawing path, so the studio pays nothing
+   * for it. Attached only when somebody wants to know what the medium did,
+   * which in practice means an agent about to decide what to paint next.
+   */
+  observe?: (event: MediumEvent) => void
   /**
    * How far this mark has got into the paper, 0 to 1. Defaults to fully dry.
    *
@@ -420,7 +502,11 @@ export function renderStroke(
   if (runs.length === 0) return
 
   const allPoints = runs.flat()
-  const halfWidth = (brush.baseWidth * (0.34 + pressure * 0.92)) / 2
+  // The mark's own width when it names one, the brush's when it does not.
+  // Pressure still slides it either way, so a named width is a size of brush
+  // rather than a fixed measurement.
+  const baseWidth = stroke.width !== undefined && stroke.width > 0 ? stroke.width : brush.baseWidth
+  const halfWidth = (baseWidth * (0.34 + pressure * 0.92)) / 2
 
   // Water and a wet ground loosen the edge; staining pigments tighten it.
   const rough =
@@ -480,6 +566,25 @@ export function renderStroke(
     ? (u: number): number => spreadFull * (0.12 + driedFrom(clamp01(bleed(u))) * 0.88)
     : null
   const radius = spanRadius(allPoints)
+
+  const observe = context.observe
+  if (observe) {
+    /**
+     * How far the pigment finished from where the path put it.
+     *
+     * Measured at the stamp the rim is taken from rather than at the outermost
+     * one. The stamps fade as they spread, so the very widest carries almost no
+     * pigment and reporting its reach describes a boundary nobody can see.
+     * on a full-sheet wash that came out as nearly two hundred units of creep,
+     * which is true of the geometry and a lie about the picture. The rim is
+     * where the wash visibly ends, so it is where this is asked.
+     */
+    const creep = RIM_AT * spreadFull * (filled ? radius : halfWidth)
+    if (creep >= 6) {
+      observe({ kind: 'spread', amount: Math.round(creep) })
+    }
+  }
+
   // A big wash pools further than a small one, so drift scales with the mark.
   const drift =
     TUNING.drift * (0.2 + water * 0.8) * (filled ? 1 + Math.min(2.6, radius / 55) : 1)
@@ -530,9 +635,72 @@ export function renderStroke(
   bctx.clip()
   bctx.scale(scaleX, scaleY)
 
-  bctx.globalCompositeOperation = 'multiply'
-  bctx.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`
-  bctx.strokeStyle = bctx.fillStyle
+  /**
+   * Taking pigment off rather than putting it on.
+   *
+   * Everything above this line is the same for a lift as for a mark: the same
+   * fractal edge, the same spread into the fibre, the same soft side. That is
+   * not a shortcut, it is the point: a passage lifted with a damp brush has an
+   * edge made by exactly the physics that made the wash's, so it has to be made
+   * the same way. Only two things differ. The pigment is the paper's own
+   * colour, and the buffer goes onto the sheet with `lighten` instead of
+   * `multiply`, so the mark can only ever pull a passage back toward the sheet
+   * and never darken one.
+   *
+   * The effects further down are all consequences of pigment arriving
+   * (granulation, pooling, the drying rim, the backrun) so a lift skips them.
+   */
+  const lifting = stroke.lift === true
+  const paperTone = context.paperTone ?? '#f6f2e8'
+
+  bctx.globalCompositeOperation = lifting ? 'source-over' : 'multiply'
+  const flatInk = lifting ? paperTone : `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`
+
+  /**
+   * A wash that is not the same at both ends.
+   *
+   * Built as a canvas gradient across the mark's own bounds along the requested
+   * angle, so the stamps carry it rather than having it painted over them
+   * afterwards: a gradient laid on top would sit above the edge darkening and
+   * the granulation and read as a filter, where this one is the pigment itself
+   * arriving unevenly, which is what a graded wash is.
+   *
+   * Running toward white rather than toward transparent, because the buffer
+   * composites with multiply and white is multiply's nothing. Fading to
+   * transparent would leave the far end of the wash showing the buffer's own
+   * empty pixels instead of the paper.
+   */
+  const ink = ((): string | CanvasGradient => {
+    const grade = stroke.grade
+    if (lifting || !grade || allPoints.length === 0) return flatInk
+
+    const b = boundsOf(allPoints)
+    const angle = ((grade.angle ?? 90) * Math.PI) / 180
+    const dx = Math.cos(angle)
+    const dy = Math.sin(angle)
+    // Half the diagonal projected on the axis: the gradient spans the shape
+    // whatever direction it is asked to run in.
+    const reachAlong = (Math.abs(dx) * b.w + Math.abs(dy) * b.h) / 2
+    const mx = b.x + b.w / 2
+    const my = b.y + b.h / 2
+    const g = bctx.createLinearGradient(
+      mx - dx * reachAlong, my - dy * reachAlong,
+      mx + dx * reachAlong, my + dy * reachAlong,
+    )
+
+    const far = grade.pigment ? getPigment(grade.pigment) : null
+    const fade = clamp01(grade.fade ?? (far ? 0 : 0.7))
+    const [fr, fg, fb] = far ? hexToRgb(far.hex) : rgb
+    // Toward white by `fade`, so the far end thins out on the paper.
+    const mix = (c: number): number => Math.round(c + (255 - c) * fade)
+
+    g.addColorStop(0, flatInk)
+    g.addColorStop(1, `rgb(${mix(fr)},${mix(fg)},${mix(fb)})`)
+    return g
+  })()
+
+  bctx.fillStyle = ink
+  bctx.strokeStyle = flatInk
 
   const jitter = makeRng(stroke.seed ^ 0x9e37)
   let widest: Point[][] = []
@@ -545,7 +713,20 @@ export function renderStroke(
       // Where this mark dissolves and where it holds. Fixed per stroke, so the
       // same side stays soft through every stamp and the eye reads one edge
       // rather than a shimmer.
-      const phase = (stroke.seed % 1000) / 1000 * Math.PI * 2 + r * 1.7
+      /**
+       * Where the loose side of this mark faces.
+       *
+       * `expandVarying` swells the perimeter as `sin(2a + phase)`, so the first
+       * maximum sits at a = (pi/2 - phase)/2. Solving that for a requested
+       * direction is what turns a decorative wobble into a decision: ask for
+       * soft toward the light and every shape in the passage agrees about where
+       * the light is. Subpaths after the first keep their offset so a shape
+       * with a hole does not have both boundaries swelling identically.
+       */
+      const phase =
+        stroke.softToward === undefined
+          ? ((stroke.seed % 1000) / 1000) * Math.PI * 2 + r * 1.7
+          : Math.PI / 2 - 2 * ((stroke.softToward * Math.PI) / 180) + r * 1.7
       // A filled wash has no along-the-line to vary over. It is a shape, not a
       // pull, so it keeps the averaged spread and only the drawn stroke asks
       // per point.
@@ -591,14 +772,58 @@ export function renderStroke(
 
     bctx.save()
     bctx.translate(dx, dy)
-    bctx.globalAlpha = alpha * (1 - t * 0.5)
+    /**
+     * A lift builds its buffer to full strength and is metered on the way out.
+     *
+     * Stacking eight to eighteen partly-opaque stamps of the paper tone with
+     * source-over saturates the middle of the shape to solid paper within the
+     * first few, so every lift above the faintest came out as a flat pale patch
+     * with a hard boundary, which is the one thing a lifted passage never is. Building
+     * the buffer solid and scaling the whole thing by the requested strength at
+     * the composite keeps the stamps' soft edge intact and makes opacity mean
+     * what it says: a little of the pigment back, or most of it.
+     */
+    bctx.globalAlpha = lifting ? Math.min(0.5, 1.4 / fullStamps) : alpha * (1 - t * 0.5)
     bctx.beginPath()
     for (const poly of polys) addPolygon(bctx, poly)
     bctx.fill(rule)
     bctx.restore()
 
-    if (t > 0.62 && !rimPolys) rimPolys = polys
+    if (t > RIM_AT && !rimPolys) rimPolys = polys
     widest = polys
+  }
+
+  // Which way the mark went soft.
+  //
+  // `expandVarying` swells the perimeter unevenly around a phase fixed per
+  // stroke, so one side of every wash is looser than the other. That is the
+  // lost-and-found edge the whole renderer is built around, and until now the
+  // only way to find out where it landed was to look at the picture.
+  if (observe && widest.length > 0) {
+    const rim2 = widest.flat()
+    let cx = 0
+    let cy = 0
+    for (const p of rim2) { cx += p.x; cy += p.y }
+    cx /= rim2.length
+    cy /= rim2.length
+
+    let loosest = rim2[0]
+    let far = -Infinity
+    let tightest = rim2[0]
+    let near = Infinity
+    for (const p of rim2) {
+      const d = Math.hypot(p.x - cx, p.y - cy)
+      if (d > far) { far = d; loosest = p }
+      if (d < near) { near = d; tightest = p }
+    }
+    if (far - near > Math.max(4, far * 0.14)) {
+      observe({
+        kind: 'lost-edge',
+        x: Math.round(loosest.x),
+        y: Math.round(loosest.y),
+        detail: `tightest at ${Math.round(tightest.x)},${Math.round(tightest.y)}`,
+      })
+    }
   }
 
   // Edge darkening. As a wash dries, water evaporates fastest at the perimeter
@@ -614,9 +839,28 @@ export function renderStroke(
     (0.3 + water * 0.7) *
     (1 - pigment.staining * 0.35) *
     (0.18 + load * 0.82) *
+    /**
+     * Almost nothing, on paper that was still wet.
+     *
+     * A rim forms because the water has a boundary to evaporate at and drags
+     * pigment to it. A mark laid into a passage that is still open has no
+     * boundary: its water is continuous with the water already there, and the
+     * pigment simply keeps travelling. This was missing, and the symptom was
+     * exact: three washes laid wet into wet to make one soft mass each drew
+     * their own dark outline, so an animal painted the way the recipe says came
+     * out as three overlapping shapes with edges rather than one form. Fusion
+     * that the studio reports but does not draw is not fusion.
+     */
+    (1 - wetness * 0.85) *
     // The rim is left behind by evaporation, so it is the last thing to appear.
     settle * settle
-  if (rim > 0.02 && rimPolys) {
+  // Guarded the same way the rim itself is: a lift does not leave a drying rim,
+  // and reporting one it never drew is worse than silence, because the agent answers
+  // an edge that is not on the sheet.
+  if (!lifting && observe && rim > 0.18) {
+    observe({ kind: 'rim', amount: Math.round(rim * 100) / 100 })
+  }
+  if (!lifting && rim > 0.02 && rimPolys) {
     bctx.lineJoin = 'round'
     bctx.lineCap = 'round'
     const band = (1.5 + water * 4) * (filled ? 1.4 : 1)
@@ -632,11 +876,15 @@ export function renderStroke(
   // Granulation: heavy particles drop into the valleys of the tooth.
   // Pooling. Laid before the granulation so the heavy particles settle into a
   // wash that already has deep and thin places, rather than onto a flat one.
-  if (widest.length && settle > 0.15) {
+  if (!lifting && widest.length && settle > 0.15) {
     const b = boundsOf(widest.flat())
     const span = Math.max(b.w, b.h) / TUNING.poolsAcross
-    const angle = makeRng(stroke.seed ^ 0x4f00)() * Math.PI * 2
-    const pattern = scaledPattern(bctx, getPoolTile(), Math.max(24, span), angle)
+    const poolRng = makeRng(stroke.seed ^ 0x4f00)
+    const angle = poolRng() * Math.PI * 2
+    const pattern = scaledPattern(
+      bctx, getPoolTile(), Math.max(24, span), angle,
+      poolRng() * span, poolRng() * span,
+    )
     if (pattern) {
       bctx.save()
       bctx.beginPath()
@@ -675,11 +923,22 @@ export function renderStroke(
     TUNING.granulation *
     (0.2 + load * 0.8) *
     (0.32 + dried * 0.68)
-  if (gran > 0.06 && widest.length) {
-    // Each mark gets its own grain orientation, so the tile never lines up
-    // with its neighbours into a visible weave.
-    const grainAngle = makeRng(stroke.seed ^ 0x6a11)() * Math.PI * 2
-    const pattern = scaledPattern(bctx, getGranulationTile(), TUNING.grainSpan, grainAngle)
+  if (!lifting && observe && gran > 0.16) {
+    observe({
+      kind: 'granulation',
+      amount: Math.round(gran * 100) / 100,
+      detail: pigment.name,
+    })
+  }
+  if (!lifting && gran > 0.06 && widest.length) {
+    // Each mark gets its own grain orientation and its own phase, so the tile
+    // never lines up with its neighbours into a visible weave.
+    const grainRng = makeRng(stroke.seed ^ 0x6a11)
+    const grainAngle = grainRng() * Math.PI * 2
+    const pattern = scaledPattern(
+      bctx, getGranulationTile(), TUNING.grainSpan, grainAngle,
+      grainRng() * TUNING.grainSpan, grainRng() * TUNING.grainSpan,
+    )
     if (pattern) {
       bctx.save()
       bctx.beginPath()
@@ -697,7 +956,7 @@ export function renderStroke(
   // Gravity and an uneven drying front leave one side of a wash deeper than the
   // other. Without this a flooded shape reads as a flat vector fill however
   // ragged its edge is.
-  if (widest.length) {
+  if (!lifting && widest.length) {
     const rng = makeRng(stroke.seed ^ 0x9a17)
     const b = boundsOf(widest.flat())
     const angle = rng() * Math.PI * 2
@@ -721,6 +980,124 @@ export function renderStroke(
     bctx.restore()
   }
 
+  /**
+   * Charging: a second pigment dropped into the wash while it still ran.
+   *
+   * Laid inside the same buffer as the wash itself and clipped to it, which is
+   * the whole distinction being drawn. A second mark painted on top is a second
+   * mark, and it brings its own edge, its own rim and its own spread however
+   * softly it is laid. This has none of those, because it is not a mark: it is
+   * more pigment arriving in water that is already there, so it fades out into
+   * the wash with no boundary at all.
+   */
+  if (!lifting && stroke.charge?.length && widest.length) {
+    const chargeRng = makeRng(stroke.seed ^ 0xc7a6)
+    bctx.save()
+    bctx.beginPath()
+    for (const poly of widest) addPolygon(bctx, poly)
+    bctx.clip(rule)
+    bctx.globalCompositeOperation = 'multiply'
+
+    const cb = boundsOf(widest.flat())
+    const across = Math.max(cb.w, cb.h)
+    for (const drop of stroke.charge) {
+      const dropPigment = getPigment(drop.pigment)
+      const [dr, dg, db] = hexToRgb(dropPigment.hex)
+      const reach = Math.max(12, across * clamp01(drop.spread ?? 0.34))
+      const strength = Math.min(0.85, alpha * 2.2 * clamp01(drop.strength ?? 0.7) * settle)
+      if (strength < 0.02) continue
+
+      // An irregular boundary rather than a clean disc, for the same reason
+      // the bloom has one: water does not travel the same distance in every
+      // direction through paper fibre.
+      const tilt = chargeRng() * Math.PI * 2
+      const squash = 0.7 + chargeRng() * 0.5
+      const sides = 40
+      const ring: Point[] = []
+      for (let k = 0; k < sides; k++) {
+        const a = (k / sides) * Math.PI * 2
+        const wobble = 1 + Math.sin(a * 3 + tilt) * 0.2 + Math.sin(a * 7 + tilt * 1.7) * 0.1
+        const rx = Math.cos(a) * reach * wobble
+        const ry = Math.sin(a) * reach * squash * wobble
+        ring.push({
+          x: drop.x + rx * Math.cos(tilt) - ry * Math.sin(tilt),
+          y: drop.y + rx * Math.sin(tilt) + ry * Math.cos(tilt),
+        })
+      }
+
+      bctx.save()
+      tracePolygon(bctx, ring)
+      bctx.clip()
+      const g = bctx.createRadialGradient(drop.x, drop.y, reach * 0.05, drop.x, drop.y, reach)
+      g.addColorStop(0, `rgba(${dr},${dg},${db},${strength.toFixed(3)})`)
+      g.addColorStop(0.55, `rgba(${dr},${dg},${db},${(strength * 0.45).toFixed(3)})`)
+      g.addColorStop(1, `rgba(${dr},${dg},${db},0)`)
+      bctx.globalAlpha = 1
+      bctx.fillStyle = g
+      bctx.fillRect(drop.x - reach * 1.6, drop.y - reach * 1.6, reach * 3.2, reach * 3.2)
+      bctx.restore()
+    }
+    bctx.restore()
+  }
+
+  /**
+   * Spatter: pigment knocked off the brush rather than drawn with it.
+   *
+   * Kept to the mark's own shape by clipping, so a path is a region to spatter
+   * into rather than a thing to spatter along. The specks vary in size by about
+   * four to one and in strength rather more, because a flicked brush throws a
+   * few heavy drops and a great many small ones, and an even scatter of equal
+   * dots reads as noise laid over a picture instead of as paint thrown at it.
+   */
+  if (!lifting && stroke.spatter && widest.length) {
+    const spatterRng = makeRng(stroke.seed ^ 0x5b17)
+    const sb = boundsOf(widest.flat())
+    const density = Math.max(1, Math.min(400, stroke.spatter.density ?? 40))
+    const size = Math.max(0.5, Math.min(24, stroke.spatter.size ?? 2.5))
+    const count = Math.min(1400, Math.round((sb.w * sb.h) / 10_000 * density))
+
+    if (count > 0) {
+      bctx.save()
+      bctx.beginPath()
+      for (const poly of widest) addPolygon(bctx, poly)
+      bctx.clip(rule)
+      bctx.globalCompositeOperation = 'multiply'
+      bctx.fillStyle = flatInk
+
+      for (let i = 0; i < count; i++) {
+        const x = sb.x + spatterRng() * sb.w
+        const y = sb.y + spatterRng() * sb.h
+        /**
+         * Very many tiny specks and a very few large ones.
+         *
+         * A knocked brush throws a spray whose sizes are wildly uneven, and the
+         * first version of this used a cubic skew that still put most of its
+         * specks in the middle of the range. The result was a field of evenly
+         * sized circles: not grit but polka dots, which is worse than no
+         * texture at all. A fourth power puts nine specks in ten below half the
+         * nominal size, and the handful of big ones are what the eye reads as
+         * spatter.
+         */
+        const roll = spatterRng()
+        const r = size * (0.16 + roll * roll * roll * roll * 3.2)
+        // Small specks are usually faint too, so the texture fades out rather
+        // than stopping at a size.
+        const faint = 0.25 + roll * roll * 1.5
+        bctx.globalAlpha = Math.min(0.85, alpha * faint * (0.5 + spatterRng()) * settle)
+        // Squashed and turned, so a speck is a splash rather than a dot.
+        bctx.save()
+        bctx.translate(x, y)
+        bctx.rotate(spatterRng() * Math.PI)
+        bctx.scale(1, 0.4 + spatterRng() * 0.75)
+        bctx.beginPath()
+        bctx.arc(0, 0, r, 0, Math.PI * 2)
+        bctx.fill()
+        bctx.restore()
+      }
+      bctx.restore()
+    }
+  }
+
   // Blooms. Drop clean water into a wash that has begun to set and it shoves
   // the pigment outward into a pale cauliflower. Lifting pigment back out of
   // the buffer is exactly what destination-out does.
@@ -729,7 +1106,7 @@ export function renderStroke(
   // `settle` put a finished cauliflower into one frame partway through the
   // drying, which is the same pop the granulation used to make, just later.
   const bloom = clamp01((dried - 0.38) / 0.62)
-  if (water > 0.62 && bloom > 0.02 && widest.length) {
+  if (!lifting && water > 0.62 && bloom > 0.02 && widest.length) {
     applyBloom(
       bctx,
       widest.flat(),
@@ -737,6 +1114,7 @@ export function renderStroke(
       water,
       TUNING.bloom * bloom,
       `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`,
+      observe,
     )
   }
 
@@ -751,8 +1129,9 @@ export function renderStroke(
   // paint laid over paint filters the light twice.
   ctx.save()
   ctx.setTransform(1, 0, 0, 1, 0, 0)
-  ctx.globalCompositeOperation = 'multiply'
-  ctx.globalAlpha = 1
+  ctx.globalCompositeOperation = lifting ? 'lighten' : 'multiply'
+  // Lifts meter here rather than per stamp; see the stamp alpha above.
+  ctx.globalAlpha = lifting ? clamp01(stroke.opacity) : 1
   ctx.drawImage(buf, px.x, px.y, px.w, px.h, px.x, px.y, px.w, px.h)
   ctx.restore()
 }
@@ -776,6 +1155,7 @@ function applyBloom(
   water: number,
   strength: number,
   ink: string,
+  observe?: (event: MediumEvent) => void,
 ): void {
   const rng = makeRng(seed ^ 0xb100)
   const b = boundsOf(poly)
@@ -795,6 +1175,12 @@ function applyBloom(
     const cy = b.y + b.h * (0.2 + rng() * 0.6)
     const r = Math.min(across * (0.12 + rng() * 0.18), 54)
     if (r < 8) continue
+    observe?.({
+      kind: 'bloom',
+      x: Math.round(cx),
+      y: Math.round(cy),
+      amount: Math.round(r * 2),
+    })
 
     // Enough sides that the boundary wanders rather than spikes. The earlier
     // version used eighteen with heavy wobble and produced starbursts.
@@ -974,6 +1360,8 @@ export function renderScene(
   scene: Scene,
   deviceW: number,
   deviceH: number,
+  /** Notified of everything the paint does on its own, per stroke. Optional. */
+  observe?: (strokeId: string, event: MediumEvent) => void,
 ): void {
   const scaleX = deviceW / CANVAS_W
   const scaleY = deviceH / CANVAS_H
@@ -984,6 +1372,20 @@ export function renderScene(
 
   for (const stroke of paintOrder(scene)) {
     const layer = byLayer.get(stroke.layerId)
-    renderStroke(ctx, stroke, { wetness: layer?.wetness ?? 0, tooth }, scaleX, scaleY)
+    // The wetter of the two: a mark laid into a passage that was still open
+    // bleeds like one, whatever the layer it happens to belong to.
+    const wetness = Math.max(layer?.wetness ?? 0, stroke.ground ?? 0)
+    renderStroke(
+      ctx,
+      stroke,
+      {
+        wetness,
+        tooth,
+        paperTone: PAPERS[scene.paper].base,
+        observe: observe ? (event) => observe(stroke.id, event) : undefined,
+      },
+      scaleX,
+      scaleY,
+    )
   }
 }

@@ -1,4 +1,5 @@
-import { translatePath } from './geometry'
+import { boundsOf, sampleSubpaths, translatePath } from './geometry'
+import { wetField } from './wetfield'
 import { KAWA, type DuetScore, type DuetStep } from './duet'
 import { presence } from './presence'
 import {
@@ -93,15 +94,31 @@ export interface PaintInput {
   pressure?: number
   opacity?: number
   fill?: boolean
+  width?: number
+  lift?: boolean
+  grade?: Stroke['grade']
+  spatter?: Stroke['spatter']
+  charge?: Stroke['charge']
+  softToward?: number
   layerId?: string
   note?: string
   seed?: number
+  /**
+   * The wetness of the paper this mark landed on, if the caller already read it.
+   *
+   * The hand needs this: it reads the sheet when the brush goes down and draws
+   * the preview against that, so the value has to survive to the commit rather
+   * than being read a second time from a field that has been drying in the
+   * meantime. Same argument as `seed`. Left out, it is read here.
+   */
+  ground?: number
 }
 
 export type StrokePatch = Partial<
   Pick<
     Stroke,
-    'path' | 'kind' | 'pigment' | 'water' | 'pressure' | 'opacity' | 'fill' | 'layerId' | 'note'
+    | 'path' | 'kind' | 'pigment' | 'water' | 'pressure' | 'opacity' | 'fill' | 'layerId'
+    | 'note' | 'width' | 'lift' | 'grade' | 'softToward' | 'spatter' | 'charge'
   >
 >
 
@@ -283,16 +300,45 @@ class Studio {
         this.getLayer(this.ui.activeLayerId) ??
         this.scene.layers[0]
       const brush = this.ui.brush
+      const water = clamp01(input.water ?? brush.water)
+
+      /**
+       * Read the paper, then wet it.
+       *
+       * In that order, and inside the loop rather than around it, so that a
+       * pass which lays a wash and then drops a mark into it works the way it
+       * would on paper: the second mark finds the first one's water still
+       * there. Reading the whole batch up front would have every mark in a pass
+       * land on the sheet as it was before any of them.
+       */
+      const points = sampleSubpaths(input.path, 8).flat()
+      const footprint = boundsOf(points)
+      const ground = input.ground ?? wetField.wetnessUnder(footprint)
+      if (input.fill) {
+        wetField.deposit(footprint, water)
+      } else {
+        const kind = input.kind ?? this.ui.brush.kind
+        const pressure = clamp01(input.pressure ?? this.ui.brush.pressure)
+        wetField.depositAlong(points, (BRUSHES[kind].baseWidth * pressure) / 2, water)
+      }
+
       made.push({
         id: uid('stroke'),
         layerId: layer.id,
         kind: input.kind ?? brush.kind,
         path: input.path,
         pigment: input.pigment ?? brush.pigment,
-        water: clamp01(input.water ?? brush.water),
+        water,
         pressure: clamp01(input.pressure ?? brush.pressure),
         opacity: clamp01(input.opacity ?? brush.opacity),
         fill: input.fill ?? false,
+        width: input.width,
+        lift: input.lift,
+        grade: input.grade,
+        spatter: input.spatter,
+        charge: input.charge,
+        softToward: input.softToward,
+        ground,
         seed: input.seed ?? Math.floor(Math.random() * 1e9),
         author,
         createdAt: Date.now() + counter,
@@ -488,6 +534,7 @@ class Studio {
     this.checkpoint()
     this.scene = { ...this.scene, strokes: [] }
     this.ui = { ...this.ui, selection: [] }
+    wetField.reset()
     this.log(author, 'erase', 'Took every mark off the sheet')
     this.emit()
   }
@@ -496,6 +543,7 @@ class Studio {
     this.checkpoint()
     this.scene = blankScene()
     this.ui = { ...this.ui, selection: [], activeLayerId: 'mid' }
+    wetField.reset()
     this.log(author, 'note', 'Taped down a fresh sheet')
     this.emit()
   }

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { pointsToPath, resample, sampleSubpaths, type Point } from '@/lib/geometry'
 import { hitTest, selectionOutline } from '@/lib/hit'
 import { presence, settleAtAge } from '@/lib/presence'
+import { wetField } from '@/lib/wetfield'
 import { studio } from '@/lib/store'
 import { useStudio } from '@/lib/useStudio'
 import { BRUSHES, CANVAS_H, CANVAS_W, PAPERS, WET, type Stroke } from '@/lib/types'
@@ -145,6 +146,15 @@ export function Sheet() {
      * thing that changes.
      */
     seed: number
+    /**
+     * How wet the paper was when the brush went down.
+     *
+     * Carried for exactly the reason the seed is. The sheet dries while the
+     * mark is being drawn, so reading the wet field again at the commit gives a
+     * slightly drier answer than the preview was drawn against, and the mark
+     * would tighten by a hair the moment the brush lifted.
+     */
+    ground: number
   } | null>(null)
   const dragRef = useRef<{ last: Point; moved: number; ids: string[] } | null>(null)
   const flashRef = useRef<{ ids: string[]; at: number } | null>(null)
@@ -236,7 +246,10 @@ export function Sheet() {
         renderStroke(
           ctx,
           stroke,
-          { wetness: layerOf.get(stroke.layerId)?.wetness ?? 0, tooth },
+          {
+            wetness: Math.max(layerOf.get(stroke.layerId)?.wetness ?? 0, stroke.ground ?? 0),
+            tooth,
+          },
           size.w / CANVAS_W,
           size.h / CANVAS_H,
         )
@@ -322,7 +335,7 @@ export function Sheet() {
           ctx,
           stroke,
           {
-            wetness: layerOf.get(stroke.layerId)?.wetness ?? 0,
+            wetness: Math.max(layerOf.get(stroke.layerId)?.wetness ?? 0, stroke.ground ?? 0),
             tooth,
             settle: presence.settleProgress(id),
             // Its own profile if the hand drew it, so the head of the mark
@@ -350,7 +363,7 @@ export function Sheet() {
           ctx,
           { ...stroke, path: '' },
           {
-            wetness: layerOf.get(stroke.layerId)?.wetness ?? 0,
+            wetness: Math.max(layerOf.get(stroke.layerId)?.wetness ?? 0, stroke.ground ?? 0),
             tooth,
             settle: WET,
             // Same reasoning as the human's mark below: these are already
@@ -396,7 +409,7 @@ export function Sheet() {
           createdAt: 0,
         },
         {
-          wetness: layer?.wetness ?? 0,
+          wetness: Math.max(layer?.wetness ?? 0, drawing.ground),
           tooth,
           settle: WET,
           bleed: bleedFrom(laidProfile(drawing.points, drawing.times), brush.water, now),
@@ -692,6 +705,7 @@ export function Sheet() {
         times: [performance.now()],
         raw: pt,
         seed: Math.floor(Math.random() * 1e9),
+        ground: wetField.wetnessAt(pt.x, pt.y),
       }
       pumpFx()
     },
@@ -789,6 +803,7 @@ export function Sheet() {
             path: pointsToPath(points) + (brush.fill ? ' Z' : ''),
             fill: brush.fill,
             seed: drawing.seed,
+            ground: drawing.ground,
           },
           'human',
         )

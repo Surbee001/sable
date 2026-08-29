@@ -1,8 +1,11 @@
 import { initializeWebMCPPolyfill } from '@mcp-b/webmcp-polyfill'
 import { ensureModelContext } from './fallback-context'
-import { isValidPath, scalePath } from './geometry'
+import { boundsOf, isFaceted, isValidPath, relaxPath, samplePath, scalePath } from './geometry'
 import { PIGMENTS, SCHEMES, findScheme, getPigment, resolvePigment } from './palette'
 import { assess } from './assess'
+import { describeOpen, reportOn } from './medium'
+import { wetField } from './wetfield'
+import { perceive } from './perceive'
 import { SUBJECTS, findSubject } from './subjects'
 import { describeScene, narrateScene, snapshotRegion, snapshotScene, summariseStroke } from './snapshot'
 import { studio, type PaintInput, type StrokePatch } from './store'
@@ -98,6 +101,86 @@ const STROKE_PROPS = {
     description:
       'Layer name or id to paint on. Lower layers sit underneath. Omit to use the layer the human has active.',
   },
+  width: {
+    type: 'number',
+    description:
+      'Width of the mark in sheet units, overriding the brush size. A liner is about 7 and a mop ' +
+      'about 92, so this is the whole range between them and past both ends. Ignored on a fill.',
+  },
+  lift: {
+    type: 'boolean',
+    description:
+      'Take pigment off instead of putting it on. The mark is made exactly as any other is, with ' +
+      'the same soft edge and the same spread, but it pulls the passage back toward bare paper ' +
+      'and can never darken anything. This is how mist is made, how a cloud gets its light side, ' +
+      'and how a highlight is recovered from a wash that has closed over it. Nothing else in this ' +
+      'studio can make a passage lighter.',
+  },
+  grade: {
+    type: 'object',
+    description:
+      'Make the wash different at one end from the other. One flat colour across a large area is ' +
+      'the clearest sign a wash was computed rather than poured, and a sky is never one colour. ' +
+      'Use it on anything big.',
+    properties: {
+      angle: {
+        type: 'number',
+        description: 'Which way the change runs, in degrees. 0 points right, 90 points down. Default 90.',
+      },
+      pigment: {
+        type: 'string',
+        description:
+          'A second pigment to run toward, so the wash is variegated rather than merely graded. ' +
+          'Omit to fade the first pigment instead.',
+      },
+      fade: {
+        type: 'number',
+        minimum: 0,
+        maximum: 1,
+        description: 'How much weaker the far end is. 0 keeps full strength, 1 fades to nothing.',
+      },
+    },
+  },
+  spatter: {
+    type: 'object',
+    description:
+      'Knock pigment off the brush into this shape instead of drawing with it. The path becomes a ' +
+      'region to spatter into. This is the only granular thing in the studio: shingle, gravel, the ' +
+      'outer leaves of a tree, sparkle on broken water, grit at the front of a landscape. Use it ' +
+      'sparingly and near the viewer, because texture reads as close.',
+    properties: {
+      density: { type: 'number', description: 'Specks per ten thousand square units. 10 is sparse, 40 usual, 150 heavy.' },
+      size: { type: 'number', description: 'Average speck radius in sheet units. Default 3.' },
+    },
+  },
+  charge: {
+    type: 'array',
+    description:
+      'Drop a second colour into this wash while it is still flowing. Not the same as painting ' +
+      'another mark on top: a charged wash is ONE wash, so the colours meet in the water and there ' +
+      'is no boundary anywhere. It is how a sky goes warm in one corner without anything in it ' +
+      'looking like a shape, and how a single wash carries two greens. A second mark, however soft, ' +
+      'always brings its own edge and its own drying rim.',
+    items: {
+      type: 'object',
+      properties: {
+        pigment: { type: 'string', description: 'The pigment being dropped in.' },
+        x: { type: 'number', description: 'Where, in sheet units. Should be inside the mark.' },
+        y: { type: 'number', description: 'Where, in sheet units.' },
+        spread: { type: 'number', description: 'How far it travels, as a fraction of the mark. Default 0.34.' },
+        strength: { type: 'number', description: '0 to 1. Default 0.7.' },
+      },
+      required: ['pigment', 'x', 'y'],
+    },
+  },
+  softToward: {
+    type: 'number',
+    description:
+      'Which way this mark\'s soft side faces, in degrees, 0 right and 90 down. Left out, the ' +
+      'seed decides. Worth setting deliberately across a passage: lost and found edges are how a ' +
+      'painting says where the light is, and they only say it when neighbouring shapes agree. ' +
+      'Point the soft sides away from your light source and the crisp ones toward it.',
+  },
   note: {
     type: 'string',
     description:
@@ -118,6 +201,12 @@ function num(v: unknown, fallback: number): number {
   if (!Number.isFinite(n)) return fallback
   // Tolerate 0-100 where 0-1 was asked for.
   return n > 1 && n <= 100 ? n / 100 : n
+}
+
+/** A plain optional number. Sizes and counts are not 0..1, so `optNum` would maul them. */
+function optNumRaw(v: unknown): number | undefined {
+  const n = typeof v === 'string' ? parseFloat(v) : typeof v === 'number' ? v : NaN
+  return Number.isFinite(n) ? n : undefined
 }
 
 function optNum(v: unknown): number | undefined {
@@ -141,16 +230,75 @@ interface RawStroke {
   water?: unknown
   pressure?: unknown
   opacity?: unknown
+  width?: unknown
+  lift?: unknown
+  grade?: unknown
+  spatter?: unknown
+  charge?: unknown
+  softToward?: unknown
   layer?: unknown
   note?: unknown
 }
 
 /** Turn one loosely-typed stroke request into a validated PaintInput. */
-function toPaintInput(raw: RawStroke, index: number): PaintInput | string {
-  const path = typeof raw.path === 'string' ? raw.path.trim() : ''
+/**
+ * Faults worth mentioning back to whoever painted the mark.
+ *
+ * Every other piece of advice in this file is measured and fed back: the
+ * palette is counted, the values are compared, the coverage is gridded. The
+ * shape of a mark was the one thing only ever asked for in prose, in a tool
+ * description read once before the first call and not again. Prose does not
+ * survive a blank sheet, so this measures instead.
+ */
+function toPaintInput(
+  raw: RawStroke,
+  index: number,
+  notes: string[],
+): PaintInput | string {
+  let path = typeof raw.path === 'string' ? raw.path.trim() : ''
   if (!path) return `stroke ${index + 1}: "path" is required and must be SVG path data.`
   if (!isValidPath(path)) {
     return `stroke ${index + 1}: "${path.slice(0, 60)}" is not valid SVG path data. It must start with M.`
+  }
+
+  // A hand drawing on the sheet gets its drag fitted to cubics before it is
+  // stored. A path written by hand gets the same, and for the same reason.
+  if (isFaceted(path)) {
+    const relaxed = relaxPath(path)
+    if (isValidPath(relaxed)) {
+      path = relaxed
+      notes.push(
+        `stroke ${index + 1} arrived as straight segments and has been re-cut as curves`,
+      )
+    }
+  }
+
+  const fill = raw.fill === true || raw.fill === 'true'
+
+  // A path that closes is a region. Painted as a centreline it comes out as a
+  // ribbon following the outline of the thing instead of the thing itself,
+  // which is how a range of hills ends up looking like wire.
+  if (!fill && /[Zz]\s*$/.test(path)) {
+    notes.push(
+      `stroke ${index + 1} closes with Z but fill is false, so it was painted as an outline ` +
+        'rather than flooded. Petals, hills and skies are fills',
+    )
+  }
+
+  // Large and clear of every edge. The single most reliable way a picture built
+  // from decent marks still reads as objects arranged on paper.
+  const bounds = boundsOf(samplePath(path, 8))
+  const big = bounds.w >= CANVAS_W * 0.45 || bounds.h >= CANVAS_H * 0.45
+  const floats =
+    bounds.x > 2 &&
+    bounds.y > 2 &&
+    bounds.x + bounds.w < CANVAS_W - 2 &&
+    bounds.y + bounds.h < CANVAS_H - 2
+  if (big && floats) {
+    notes.push(
+      `stroke ${index + 1} is large but stops clear of every edge, so it will read as a ` +
+        'sticker. Big shapes should start past x -40 and end past 1040',
+    )
   }
 
   let pigment: string | undefined
@@ -162,14 +310,63 @@ function toPaintInput(raw: RawStroke, index: number): PaintInput | string {
     pigment = found.id
   }
 
+  let grade: PaintInput['grade']
+  if (raw.grade && typeof raw.grade === 'object') {
+    const g = raw.grade as Record<string, unknown>
+    let toward: string | undefined
+    if (g.pigment !== undefined && g.pigment !== null && g.pigment !== '') {
+      const found = resolvePigment(String(g.pigment))
+      if (!found) {
+        return `stroke ${index + 1}: no pigment matches "${String(g.pigment)}" in grade. Call list_palette.`
+      }
+      toward = found.id
+    }
+    grade = {
+      angle: typeof g.angle === 'number' ? g.angle : Number(g.angle) || undefined,
+      pigment: toward,
+      fade: optNum(g.fade),
+    }
+  }
+
+  const charge: NonNullable<PaintInput['charge']> = []
+  if (Array.isArray(raw.charge)) {
+    for (const item of raw.charge) {
+      if (!item || typeof item !== 'object') continue
+      const c = item as Record<string, unknown>
+      const found = resolvePigment(String(c.pigment ?? ''))
+      if (!found) {
+        return `stroke ${index + 1}: no pigment matches "${String(c.pigment)}" in charge. Call list_palette.`
+      }
+      const x = Number(c.x)
+      const y = Number(c.y)
+      if (!Number.isFinite(x) || !Number.isFinite(y)) {
+        return `stroke ${index + 1}: a charge needs x and y in sheet units.`
+      }
+      charge.push({ pigment: found.id, x, y, spread: optNum(c.spread), strength: optNum(c.strength) })
+    }
+  }
+
   return {
     path,
-    fill: raw.fill === true || raw.fill === 'true',
+    fill,
     kind: brushOf(raw.brush),
     pigment,
     water: optNum(raw.water),
     pressure: optNum(raw.pressure),
     opacity: optNum(raw.opacity),
+    // A width is a measurement in sheet units, so the 0-100 tolerance `num`
+    // applies elsewhere would quietly turn a 40-unit brush into 0.4 of one.
+    width: Number.isFinite(Number(raw.width)) && Number(raw.width) > 0 ? Number(raw.width) : undefined,
+    lift: raw.lift === true || raw.lift === 'true',
+    grade,
+    spatter: raw.spatter && typeof raw.spatter === 'object'
+      ? {
+          density: optNumRaw((raw.spatter as Record<string, unknown>).density),
+          size: optNumRaw((raw.spatter as Record<string, unknown>).size),
+        }
+      : undefined,
+    charge: charge.length > 0 ? charge : undefined,
+    softToward: Number.isFinite(Number(raw.softToward)) ? Number(raw.softToward) : undefined,
     layerId: typeof raw.layer === 'string' && raw.layer ? raw.layer : undefined,
     note: typeof raw.note === 'string' ? raw.note : undefined,
   }
@@ -264,6 +461,58 @@ function coreTools(): ToolDef[] {
     },
 
     {
+      name: 'squint',
+      description:
+        'Look at the painting the way a painter checks one: detail thrown away, colour thrown away, ' +
+        'everything collapsed into four flat tones. You get the value structure as an image you can ' +
+        'actually see, plus where the weight of the picture sits, where the eye is going to go, and ' +
+        'how hard the edges really are.\n\n' +
+        'This is not a worse version of look_at_canvas. It answers a different question, and it is the ' +
+        'question that decides whether a painting works. A photograph of the sheet shows you what you ' +
+        'painted, and every mark in it still looks like the thing you meant, which is exactly why the ' +
+        'faults that sink a picture are invisible in one: values all bunched in the middle, no real dark ' +
+        'anywhere, the mass of the thing sitting dead centre. Those only show up once the detail is gone.\n\n' +
+        'If a study holds together as four grey shapes it will hold together finished. If it does not, ' +
+        'no amount of good brushwork will save it, and the fix is always a value, never a detail.\n\n' +
+        'Worth calling after the first two or three passes, and again before you decide you are done. ' +
+        'The edge and focus readings are measured off the actual paint rather than from what you asked ' +
+        'for, so they account for what the water did after it left the brush.',
+      annotations: { readOnlyHint: true },
+      inputSchema: {
+        type: 'object',
+        properties: {
+          width: {
+            type: 'number',
+            description: 'Width of the returned value study in pixels, 240 to 1000. Default 620.',
+          },
+        },
+      },
+      execute: (input: { width?: unknown }) => {
+        const scene = studio.getScene()
+        if (scene.strokes.length === 0) {
+          return say('The sheet is blank, so there is nothing to squint at yet.')
+        }
+        const width = Math.max(240, Math.min(1000, num(input?.width, 620) > 1 ? Number(input?.width) || 620 : 620))
+        const read = perceive(scene, width)
+        return show(
+          [
+            'The painting with its detail and colour thrown away, in four values.',
+            'Light greys are your lights, the darkest grey is your dark. Judge the shapes, not the marks.',
+            '',
+            ...read.observations.map((o) => `• ${o}`),
+          ].join('\n'),
+          read.image,
+          {
+            values: read.values,
+            weight: read.weight,
+            edges: read.edges,
+            focus: read.focus,
+          },
+        )
+      },
+    },
+
+    {
       name: 'read_painting',
       description:
         'Read the painting as structured data: every stroke with its id, pigment, water, brush, layer, bounding box ' +
@@ -299,10 +548,13 @@ function coreTools(): ToolDef[] {
       description:
         'Work out what the picture needs next. Call this before every pass, including your ' +
         'first, and again after you have painted.\n\n' +
-        'It measures the sheet rather than describing it: how many pigments are in play, ' +
-        'whether there is a genuine dark anywhere, how far the values actually spread, which ' +
-        'ninths of the sheet are still untouched, and how the soft edges balance against the ' +
-        'crisp ones. Then it tells you what follows from those numbers.\n\n' +
+        'It measures the sheet rather than describing it, and it measures two different things. ' +
+        'From the document: how many pigments are in play, which ninths are untouched, whether the ' +
+        'big shapes are anchored to the edges. From the rendered paint itself: the value structure ' +
+        'in four bands, where the weight of the picture actually sits, where the eye will actually ' +
+        'go, and how hard the edges actually came out once the water had finished with them. It ' +
+        'returns the value study rather than a photograph, because the photograph is the thing that ' +
+        'hides these faults. It also tells you which passages are still wet.\n\n' +
         'This exists because the failure mode of painting without measuring is always the ' +
         'same: a new hue for every shape, nothing properly dark, every edge equally soft, and ' +
         'a picture that goes flat. Those are not lapses of taste, they are lapses of ' +
@@ -312,13 +564,32 @@ function coreTools(): ToolDef[] {
       execute: () => {
         const scene = studio.getScene()
         const report = assess(scene)
+        // The document knows what was asked for. The pixels know what happened.
+        // Anything measurable off the rendered sheet is measured there instead.
+        const seen = scene.strokes.length > 0 ? perceive(scene, 620) : null
+        const open = wetField.openPatches()
+
         const text = [
           report.observations.join(' '),
+          ...(seen ? ['', 'Squinting at it:', ...seen.observations.map((o) => `  • ${o}`)] : []),
+          '',
+          describeOpen(open),
           '',
           report.suggestions.length === 1 ? 'What it needs:' : 'What it needs, in order:',
           ...report.suggestions.map((line, i) => `${i + 1}. ${line}`),
         ].join('\n')
-        return show(text, snapshotScene(scene, { width: 760 }), report as unknown as Record<string, unknown>)
+
+        return show(
+          text,
+          // The value study rather than the photograph: this tool is for
+          // judging, and the photograph is the thing that hides the faults.
+          seen ? seen.image : snapshotScene(scene, { width: 760 }),
+          {
+            ...report,
+            ...(seen ? { values: seen.values, weight: seen.weight, edges: seen.edges, focus: seen.focus } : {}),
+            stillOpen: open,
+          } as unknown as Record<string, unknown>,
+        )
       },
     },
 
@@ -333,12 +604,49 @@ function coreTools(): ToolDef[] {
         '  fill: true treats the path as a closed region flooded with a wash. Petals, leaves, skies, water, ' +
         'anything with area. A petal is a filled shape, not an outlined one. This is the single most ' +
         'common mistake: outlining a form instead of flooding it.\n\n' +
+        'FOUR MOVES THAT ARE NOT MORE MARKS. Reach for these before adding another shape:\n' +
+        '  • RESERVE THE LIGHT. A path with a second closed subpath inside it floods the outer ' +
+        'shape and leaves the inner one bare, because the fill rule is even-odd. That is how you ' +
+        'get a moon, a sunlit roof, a white sail: not by painting them, but by painting round ' +
+        'them. Untouched paper is the only true light here and it cannot be put back later.\n' +
+        '  • LIFT. Set lift true and the mark takes pigment off instead of putting it on, with the ' +
+        'same soft edge everything else has. Mist, the light side of a cloud, a highlight pulled ' +
+        'back out of a wash that has already closed. Nothing else in this studio can lighten.\n' +
+        '  • GRADE THE BIG WASHES. A large area of one flat colour is the clearest sign a wash was ' +
+        'computed. Pass grade with an angle, and either a second pigment to run toward or a fade. ' +
+        'A sky is never one colour; neither is a field.\n' +
+        '  • POINT THE SOFT EDGES. softToward says which way a mark dissolves. Decide where the ' +
+        'light is, then let every shape in the passage go soft away from it and hold its edge ' +
+        'toward it. Agreeing about that across several marks is most of what makes a picture read ' +
+        'as lit rather than assembled.\n\n' +
+        'AND SIZE THE BRUSH. width sets the mark in sheet units, from a 3-unit hair to a 200-unit ' +
+        'sweep, rather than picking whichever of the five brushes is least wrong.\n\n' +
+        'THE PAINT ANSWERS BACK, and this is what makes this a medium rather than a drawing ' +
+        'surface. Every paint call returns what the paint did that you did not ask for: how far ' +
+        'past your path it crept, which side of a wash went soft, where a cauliflower opened, what ' +
+        'granulated, what fused with what. That is not commentary on the result. It is half of the ' +
+        'picture, and it is the half you have to reply to.\n' +
+        '  • A bloom is not a mistake to paint out. It is a light shape you now own, and the move ' +
+        'is to build around it.\n' +
+        '  • A lost edge is not a failure to be crisp. It is the soft side of a form, and it starts ' +
+        'working the moment you put one hard edge near it.\n' +
+        '  • A mark that fused with the one beneath it has no boundary any more and never will ' +
+        'again. Plan around that rather than trying to recover it.\n' +
+        'Painting your next intended shape while ignoring that report is specifying outcomes again, ' +
+        'which is the thing this studio exists to be an alternative to.\n\n' +
+        'THE SHEET IS WET IN PLACES, AND IT DRIES ON A CLOCK. Every result tells you which passages ' +
+        'are still open and roughly how many seconds are left in them. Paint into an open passage and ' +
+        'the marks fuse and soften; wait, and the same mark lands with a hard edge instead. This is ' +
+        'the one decision watercolour has that no other medium does, so make it on purpose: if you ' +
+        'want two shapes to become one atmosphere, paint the second NOW, in this pass or the very ' +
+        'next. If you want them to stay separate things, let the paper close first.\n\n' +
         'HOW THE PAINT BEHAVES, because the renderer really simulates it:\n' +
         '  • Work light to dark. Layers multiply, so you can always deepen a passage and never lighten one.\n' +
         '  • Water spreads and softens. Above about 0.65 a wash blooms into a pale cauliflower.\n' +
         '  • Granulating pigments (ultramarine, cerulean, burnt sienna) mottle into the paper. ' +
         'Staining ones (phthalo blue, quinacridone rose) stay smooth and hold a hard edge.\n' +
-        '  • Painting on a wet layer bleeds outward. The lowest layer is the wettest.\n' +
+        '  • Painting into paper that is still wet bleeds outward and fuses. Both the layer and ' +
+        'anything painted there recently count as wet.\n' +
         '  • Leave paper white. Untouched sheet is the only true highlight you get.\n\n' +
         'HOW A PAINTING IS BUILT. Not one call, but four or five, in this order:\n' +
         '  1. The ground. Two or three enormous, almost colourless washes on the wettest ' +
@@ -357,6 +665,10 @@ function coreTools(): ToolDef[] {
         'from good marks still comes out looking assembled.\n\n' +
         'If you are painting a recognisable thing, call how_to_paint for it first. It gives ' +
         'the pass sequence and a path to start from for that subject specifically.\n\n' +
+        'AND SQUINT. After two or three passes call squint, which throws away the detail and the ' +
+        'colour and shows you the picture as four flat tones. Every fault that actually sinks a ' +
+        'painting is invisible in a photograph of it and obvious in that. If the value study is one ' +
+        'grey mush, nothing you paint on top of it will help and the answer is a dark.\n\n' +
         'WHAT SEPARATES A PAINTING FROM A DIAGRAM. Read this before a first pass:\n' +
         '  • Use three or four pigments for the whole picture, not twelve. Call suggest_palette ' +
         'and stay inside what it gives you. Nothing makes an image read as generated faster ' +
@@ -408,8 +720,9 @@ function coreTools(): ToolDef[] {
         }
 
         const inputs: PaintInput[] = []
+        const notes: string[] = []
         for (let i = 0; i < list.length; i++) {
-          const result = toPaintInput(list[i] ?? {}, i)
+          const result = toPaintInput(list[i] ?? {}, i, notes)
           if (typeof result === 'string') return fail(result)
           inputs.push(result)
         }
@@ -420,11 +733,39 @@ function coreTools(): ToolDef[] {
           input?.summary || `${inputs.length} stroke${inputs.length === 1 ? '' : 's'}`,
         )
         const scene = studio.getScene()
+        // What the paint did on its own. This is the half of watercolour that
+        // is not in the instructions, and the half a painter actually replies
+        // to, so it goes above the picture rather than below it.
+        const medium = reportOn(scene, made.map((s) => s.id))
+
         return show(
-          `Painted ${made.length} mark${made.length === 1 ? '' : 's'}. ` +
-            `Ids: ${made.map((s) => s.id).join(', ')}. Here is the sheet now, so check it before painting more.`,
+          [
+            `Painted ${made.length} mark${made.length === 1 ? '' : 's'}. ` +
+              `Ids: ${made.map((s) => s.id).join(', ')}.`,
+            ...(notes.length > 0
+              ? ['', 'About how these were written:', ...notes.map((n) => `  • ${n}.`)]
+              : []),
+            ...(medium.lines.length > 0
+              ? [
+                  '',
+                  'WHAT THE PAINT DID, which is not what you asked for and is the point:',
+                  ...medium.lines.map((line) => `  • ${line}`),
+                ]
+              : []),
+            '',
+            describeOpen(medium.open),
+            '',
+            'Here is the sheet. Answer what the paint did rather than starting over: ' +
+              'a bloom wants something built around it, a lost edge wants one crisp mark near it, ' +
+              'and a passage that is still open will never be this workable again.',
+          ].join('\n'),
           snapshotScene(scene, { width: 760 }),
-          { painted: made.map((s) => summariseStroke(scene, s)) },
+          {
+            painted: made.map((s) => summariseStroke(scene, s)),
+            ...(notes.length > 0 ? { notes } : {}),
+            medium: medium.events,
+            stillOpen: medium.open,
+          },
         )
       },
     },
@@ -879,9 +1220,16 @@ function coreTools(): ToolDef[] {
     {
       name: 'how_to_paint',
       description:
-        'How a particular thing is actually painted: how many washes, in what order, at what ' +
-        'strength, what the silhouette does, and the mistake that subject invites.\n\n' +
-        'Call this before painting any recognisable subject. General principles do not survive ' +
+        'How a particular thing is actually built and then painted: the masses it is made of ' +
+        'before any paint, then how many washes, in what order, at what strength, and the mistake ' +
+        'that subject invites.\n\n' +
+        'The first half matters more than the second. A study can have a perfect value structure, ' +
+        'a limited palette, soft mass and crisp accents in the right places, and still come out ' +
+        'as a cartoon, because nothing was wrong with the painting and there was no drawing under ' +
+        'it. Paint cannot rescue a form that was never observed.\n\n' +
+        'Call this before painting any recognisable subject, including ones with no recipe: the ' +
+        'general method comes back instead, and it is most of the answer.\n\n' +
+        'General principles do not survive ' +
         'a blank sheet: told to keep a limited palette and vary its edges, anyone still paints ' +
         'a mountain as a triangle and a flower as a fan of even ovals, because the missing ' +
         'thing is not watercolour in general but how that subject in particular is built. ' +
@@ -894,8 +1242,10 @@ function coreTools(): ToolDef[] {
           subject: {
             type: 'string',
             description:
-              'What you are painting: mountain, flower, tree, water, sky, field. Plain words ' +
-              'work, so "a range of hills" or "poppies" both land. Omit to list everything.',
+              'What you are painting: mountain, flower, tree, water, sky, field, animal, bird, ' +
+              'figure, building, boat. Plain words work, so "a range of hills", "poppies" and ' +
+              '"a sitting hare" all land. Ask even when nothing obviously matches, because the general ' +
+              'method comes back, and it is the part that matters. Omit to list everything.',
           },
         },
       },
@@ -903,21 +1253,58 @@ function coreTools(): ToolDef[] {
         const describe = (r: (typeof SUBJECTS)[number]) => ({
           id: r.id,
           name: r.name,
+          howItIsBuilt: r.drawing,
           watchOutFor: r.trap,
           passes: r.passes,
         })
         const found = typeof input?.subject === 'string' ? findSubject(input.subject) : null
         if (!found) {
+          /**
+           * Nothing matched, so say something useful anyway.
+           *
+           * This used to return a list of names and the advice that "the nearest
+           * one is usually a good skeleton", which is a shrug with a full stop
+           * on it. An agent that asks how to paint a thing and is told to guess
+           * goes and invents geometry, and inventing geometry is exactly where
+           * crude pictures come from. The general method is not much shorter
+           * than a recipe and it is far better than nothing.
+           */
           return say(
-            `Worked recipes for: ${SUBJECTS.map((r) => r.name).join(', ')}. ` +
-              'Ask for one by name. For anything not listed, the nearest one is usually a good ' +
-              'skeleton: almost everything is built back to front, palest first, with one dark ' +
-              'kept until last.',
+            [
+              `No worked recipe for that one. There are recipes for: ${SUBJECTS.map((r) => r.name).join(', ')}.`,
+              '',
+              'The method underneath all of them, which works for anything:',
+              '',
+              '1. DRAW IT FIRST, in masses. Almost nothing is one shape. Work out the two or three ' +
+                'simple masses it is built from, how big they are relative to each other, and where ' +
+                'they overlap. Getting that ratio right is what makes a thing recognisable; no ' +
+                'amount of good paint rescues a form that was never observed. Detail comes last ' +
+                'and does not fix structure.',
+              '2. ONE SOFT MASS. Paint the whole subject as a single pale wash, wet into wet, before ' +
+                'any part of it is separate from any other part. Vary the colour inside it with ' +
+                'charge rather than mixing one flat tone.',
+              '3. THE WEIGHT, WHILE IT IS OPEN. One darker wash on the shadow side, laid in before ' +
+                'the first closes so there is no boundary between them. This is what turns a flat ' +
+                'shape into something with a far side.',
+              '4. WAIT. Let the sheet dry. The whole difference between a subject and a stain is ' +
+                'that the mass is soft and the accents are crisp, and you cannot have the second ' +
+                'on wet paper.',
+              '5. FOUR OR FIVE ACCENTS. Load above 0.8, water under 0.3, small. Spend them on ' +
+                'structure, where one form turns behind another or where something meets the ' +
+                'ground, and not on features. Stop while you still want to add more.',
+              '6. LIFT ONE LIGHT, where the light actually falls.',
+              '',
+              'Ask for the nearest listed subject too: a hare and a mountain share more than they ' +
+                'look like they do, because both are three masses at three strengths.',
+            ].join('\n'),
             { subjects: SUBJECTS.map(describe) },
           )
         }
         const lines = [
           `${found.name}.`,
+          '',
+          `HOW IT IS BUILT, before any paint: ${found.drawing}`,
+          '',
           `Watch out for: ${found.trap}`,
           '',
           ...found.passes.flatMap((pass, i) => [

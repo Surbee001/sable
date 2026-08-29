@@ -598,3 +598,152 @@ export function scalePath(d: string, factor: number, originX: number, originY: n
     }),
   )
 }
+
+/* ------------------------------------------------------------------ *
+ * Straightness
+ *
+ * Watercolour has no straight edges. A brush loaded with water cannot make
+ * one, and a wash poured onto paper will not hold one. So a path built out of
+ * `L` commands does not describe a mark this medium could produce, however
+ * carefully everything else about it was chosen.
+ *
+ * A hand drawing on the sheet never hits this: `pointsToPath` fits cubics
+ * through the drag before it is stored, so the shakiest mouse still arrives as
+ * curves. An agent writing path data by hand gets no such pass, and a language
+ * model asked for a ridgeline in SVG will reach for a polyline nearly every
+ * time. That asymmetry, not any failure of the renderer, is what puts zigzag
+ * mountains and glass-shard skies on the sheet.
+ *
+ * These give the ingest path the same courtesy the mouse already gets.
+ * ------------------------------------------------------------------ */
+
+export interface PathShape {
+  /** Drawing commands, moves and closes excluded. */
+  segments: number
+  straight: number
+  curved: number
+  /** 0 when every segment is a curve, 1 when the path is nothing but corners. */
+  straightness: number
+  subpaths: number
+  closed: boolean
+}
+
+export function pathShape(d: string): PathShape {
+  let straight = 0
+  let curved = 0
+  let subpaths = 0
+  let closed = false
+
+  for (const seg of parsePath(d)) {
+    switch (seg.cmd.toLowerCase()) {
+      case 'm': subpaths++; break
+      // Z draws the side back to the start, and on a triangle that side is a
+      // third of the shape. Not counting it lets the oldest wrong mountain in
+      // the book through on a technicality.
+      case 'z': closed = true; straight++; break
+      case 'l': case 'h': case 'v': straight++; break
+      default: curved++
+    }
+  }
+
+  const segments = straight + curved
+  return {
+    segments,
+    straight,
+    curved,
+    straightness: segments === 0 ? 0 : straight / segments,
+    subpaths,
+    closed,
+  }
+}
+
+/**
+ * Is this path nothing but corners?
+ *
+ * The test is that it contains no curve whatsoever, which is stricter than it
+ * first looks and deliberately so. A silhouette described with beziers and then
+ * closed with two or three straight runs off the edge of the sheet is correct,
+ * exactly what the worked recipes in `subjects.ts` do, and an earlier
+ * version of this, which relaxed anything three quarters straight, took those
+ * apart. One curve anywhere is proof the author could have written curves where
+ * it mattered, so the straight parts are load-bearing and get left alone.
+ *
+ * What is left is the path drawn entirely out of corners: the zigzag ridgeline,
+ * the triangle mountain, the glass-shard sky. Three segments minimum, so a lone
+ * straight mark (a ripple, a horizon, the edge of a table) still stands.
+ */
+export function isFaceted(d: string): boolean {
+  const shape = pathShape(d)
+  return shape.segments >= 3 && shape.curved === 0
+}
+
+/** Laplacian smoothing around a closed ring, with no fixed ends to pin. */
+function smoothRing(pts: Point[], strength: number, passes: number): Point[] {
+  if (pts.length < 4 || passes < 1 || strength <= 0) return pts
+  let current = pts
+  for (let pass = 0; pass < passes; pass++) {
+    const n = current.length
+    const next: Point[] = new Array(n)
+    for (let i = 0; i < n; i++) {
+      const a = current[(i - 1 + n) % n]
+      const b = current[i]
+      const c = current[(i + 1) % n]
+      next[i] = {
+        x: b.x + ((a.x + c.x) / 2 - b.x) * strength,
+        y: b.y + ((a.y + c.y) / 2 - b.y) * strength,
+      }
+    }
+    current = next
+  }
+  return current
+}
+
+/** Catmull-Rom through a closed ring, emitted as cubics. */
+function ringToPath(pts: Point[]): string {
+  const n = pts.length
+  if (n < 3) return pointsToPath(pts)
+  const r = (v: number) => Math.round(v * 10) / 10
+  let d = `M ${r(pts[0].x)} ${r(pts[0].y)}`
+  for (let i = 0; i < n; i++) {
+    const p0 = pts[(i - 1 + n) % n]
+    const p1 = pts[i]
+    const p2 = pts[(i + 1) % n]
+    const p3 = pts[(i + 2) % n]
+    d += ` C ${r(p1.x + (p2.x - p0.x) / 6)} ${r(p1.y + (p2.y - p0.y) / 6)}` +
+      ` ${r(p2.x - (p3.x - p1.x) / 6)} ${r(p2.y - (p3.y - p1.y) / 6)}` +
+      ` ${r(p2.x)} ${r(p2.y)}`
+  }
+  return `${d} Z`
+}
+
+/**
+ * Re-cut a faceted path as curves, keeping it where it was put.
+ *
+ * The corners are rounded at the scale of `spacing`, so a ridgeline keeps its
+ * shoulders and its summit but stops being a lightning bolt. Larger spacing
+ * rounds harder. Subpaths are preserved, and a subpath that came back to where
+ * it started is smoothed as a ring so its join is no more of a corner than any
+ * other part of it.
+ */
+export function relaxPath(d: string, spacing = 22): string {
+  const runs = sampleSubpaths(d, 4)
+  if (runs.length === 0) return d
+
+  const parts: string[] = []
+  for (const run of runs) {
+    const head = run[0]
+    const tail = run[run.length - 1]
+    const isRing = run.length > 3 && Math.hypot(head.x - tail.x, head.y - tail.y) < 1.5
+
+    const pts = resample(isRing ? run.slice(0, -1) : run, spacing)
+    if (pts.length < 2) continue
+
+    parts.push(
+      isRing
+        ? ringToPath(smoothRing(pts, 0.4, 2))
+        : pointsToPath(smoothPolyline(pts, 0.4, 2)),
+    )
+  }
+
+  return parts.length > 0 ? parts.join(' ') : d
+}

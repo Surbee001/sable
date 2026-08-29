@@ -114,7 +114,10 @@ export function assess(scene: Scene): Assessment {
   observations.push(
     `Darkest mark reads ${darkest.toFixed(2)} against paper white, on a scale where 1 is as dark as paint gets.`,
   )
-  observations.push(`${soft} soft edges against ${crisp} crisp ones.`)
+  // How wet the marks went on, which is a fact about the brushwork. How hard
+  // the edges came out is a different question and `perceive` answers it off
+  // the paint.
+  observations.push(`${soft} marks laid wet against ${crisp} laid dry.`)
   if (empty.length > 0) observations.push(`Untouched: ${empty.join(', ')}.`)
 
   if (pigmentIds.size > 5) {
@@ -132,16 +135,14 @@ export function assess(scene: Scene): Assessment {
       'The values are bunched together and the picture reads flat. Push some marks lighter and one or two much darker rather than adding more in the middle.',
     )
   }
-  if (crisp === 0 && strokes.length > 3) {
-    suggestions.push(
-      'Every edge is soft, so the eye has nowhere to settle. Put one mark down at water under 0.3 and let it hold a hard edge.',
-    )
-  }
-  if (soft === 0 && strokes.length > 3) {
-    suggestions.push(
-      'Every edge is crisp, which reads as cut paper rather than paint. Flood one shape at water above 0.7 and let it bleed into what is underneath.',
-    )
-  }
+  // Edges are not judged here any more.
+  //
+  // What this could see was each stroke's `water`, which is what was asked for.
+  // It is not what happened: a crisp mark laid into a passage that was still
+  // open does not stay crisp, and a wash with something painted over it loses
+  // its edge whatever its own water was. `perceive` reads the hardness off the
+  // rendered paint instead, and two edge verdicts that disagree are worse than
+  // one that is right.
   if (empty.length >= 4 && strokes.length > 3) {
     suggestions.push(
       `Most of the sheet is untouched. That can be right, but if the composition feels unbalanced put something small in ${empty[0]}.`,
@@ -155,13 +156,23 @@ export function assess(scene: Scene): Assessment {
   // A picture assembled from marks that each sit clear of the edges reads as a
   // diagram of a scene rather than a view of one, however well each mark is
   // made. Cheap to detect and one of the most common faults.
-  const touchesEdge = strokes.some((stroke) => {
+  //
+  // Asked of the whole picture at once this is nearly useless: one small mark
+  // anywhere along a border satisfies it, and a sheet of floating shapes passes
+  // because a single ridgeline happened to run off the left. What matters is
+  // whether the *large* shapes are anchored, so each one is asked separately.
+  const floating = strokes.filter((stroke) => {
     const b = summariseStroke(scene, stroke).bounds
-    return b.x <= 2 || b.y <= 2 || b.x + b.w >= CANVAS_W - 2 || b.y + b.h >= CANVAS_H - 2
+    const large = b.w >= CANVAS_W * 0.45 || b.h >= CANVAS_H * 0.45
+    if (!large) return false
+    return b.x > 2 && b.y > 2 && b.x + b.w < CANVAS_W - 2 && b.y + b.h < CANVAS_H - 2
   })
-  if (!touchesEdge && strokes.length > 3) {
+  if (floating.length > 0) {
+    observations.push(
+      `${floating.length} large ${floating.length === 1 ? 'shape stops' : 'shapes stop'} clear of every edge of the sheet.`,
+    )
     suggestions.push(
-      'Every mark stops short of the edges, so the picture reads as objects arranged on paper rather than a view. Take the largest washes out past the edge of the sheet: start them around x -40 and end them past 1040.',
+      `${floating.length === 1 ? 'A large shape sits' : 'Large shapes sit'} with clear paper all the way round, which reads as objects arranged on a page rather than a view of somewhere. Extend the big washes off the sheet: start them around x -40 and end them past 1040.`,
     )
   }
 

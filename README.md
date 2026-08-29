@@ -76,6 +76,7 @@ as the fallback. All of it is in `lib/webmcp.ts`.
 | `set_brush` | Loads the brush the human is holding, and sets their mode |
 | `undo`, `redo`, `clear_sheet` | Full control of the canvas, always available |
 | `look_at_canvas` | An image of the sheet, plus a written summary |
+| `squint` | The sheet as four flat values, the way a painter checks one |
 | `inspect_region` | An enlarged crop, for judging one passage |
 | `read_painting` | Every stroke as data: id, pigment, water, bounds, path |
 | `paint` | Lays down one or many marks, returning an image of the result |
@@ -86,7 +87,62 @@ as the fallback. All of it is in `lib/webmcp.ts`.
 | `list_palette` | Pigments, brushes and papers, and how each behaves |
 | `manage_layers`, `set_sheet` | Layers, wetness, paper, title |
 
-### Three things worth looking at
+### The sheet answers back
+
+Three things here that an agent-driven canvas does not usually have. All three
+were already simulated in `lib/watercolor.ts` and none of them was ever said out
+loud, which meant the agent was working in a medium it could not perceive.
+
+**1. The paint reports what it did.** Every `paint` call comes back with the
+things the water decided, not the things that were asked for: how far past its
+path a wash finished, which side of it went soft, where a cauliflower opened,
+what granulated, what fused with what.
+
+```
+WHAT THE PAINT DID, which is not what you asked for and is the point:
+  • The sky finished about 109 units outside the path you gave it,
+    and went softest on its top left.
+  • A cauliflower opened in the far range at (775, 224), about 108 across.
+    The water backran before the wash had set. It cannot be painted out,
+    only worked with.
+  • The near land landed on paper still wet from the far range and fused
+    with it. There is no edge between them now, and there is no getting one back.
+```
+
+This is the README's own argument made mechanical. Watercolour is not controlled
+by specifying an outcome; you choose how much water is on the brush and live
+with where it goes. An agent that never hears where it went is not painting in
+the medium, it is issuing shapes and receiving a JPEG. Now the next mark can be
+a reply. The renderer emits these as it draws (`StrokeContext.observe`), so the
+report is the same arithmetic that made the pixels rather than a second copy of
+it that would drift.
+
+**2. The sheet is wet in places, and dries on a clock.** Layer wetness was a
+constant: the Ground layer was 0.6 wet whether you had painted on it a second
+ago or never. `lib/wetfield.ts` gives the paper its own wetness on a grid,
+charged where a mark lands and decaying over the next half-minute or so. Every
+result says which passages are still open and roughly how many seconds are left
+in them. Paint into one now and the marks fuse and soften; wait and they will
+not. That is the one decision watercolour has that no other medium does, and it
+is now a decision rather than an accident.
+
+A mark's ground wetness is frozen into the mark when it lands, so re-rendering
+stays deterministic (same seed, same painting, forever). What the sheet was
+doing when the brush touched is a permanent fact about that mark.
+
+**3. It can squint.** A photograph of a painting shows you what you painted, and
+every mark in it still looks like the thing you meant, which is exactly why the
+faults that sink a picture are invisible in one. `squint` throws away the detail
+and the colour and returns the sheet as four flat tones, plus where the weight
+actually sits, where the eye will actually go, and how hard the edges actually
+came out once the water had finished with them, all measured off the rendered
+paint rather than off what was requested.
+
+It is a blur and a posterize, the cheapest thing in `lib/perceive.ts` and by a
+distance the most useful, because it turns the question that decides whether a
+painting works into something an agent can be shown rather than told.
+
+### Three more things worth looking at
 
 **1. The tools return pictures.** A result that only says `{ ok: true }` leaves
 the agent painting blind, in a medium whose whole character is doing something
@@ -95,11 +151,13 @@ rest return an `image` content block, so the agent can look at what it did,
 judge it, and correct it.
 
 **2. The agent works out what to do rather than being told.** There is no prompt
-box. `assess_painting` measures the document: pigment count, whether there is a
-genuine dark anywhere, how far values spread, which ninths are untouched, how
-soft edges balance against crisp. The failure mode of painting without measuring
-is always the same, whoever holds the brush, and all of it is visible in the
-document, so the page just computes it.
+box. `assess_painting` measures two different things. From the document: pigment
+count, which ninths are untouched, whether the big shapes are anchored to the
+edges. From the rendered paint itself: the value structure, where the weight
+sits, where the eye goes, how hard the edges came out. The failure mode of
+painting without measuring is always the same, whoever holds the brush, and the
+half of it that lives in the pixels rather than in the document is the half that
+used to be guessed at.
 
 **3. The toolbox is a live description of what is possible.** The registered set
 is rebuilt, firing `toolchange`, whenever the *shape* of what the studio can do
