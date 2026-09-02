@@ -5,6 +5,7 @@ import { pointsToPath, resample, sampleSubpaths, type Point } from '@/lib/geomet
 import { hitTest, selectionOutline } from '@/lib/hit'
 import { presence, settleAtAge } from '@/lib/presence'
 import { wetField } from '@/lib/wetfield'
+import { hand } from '@/lib/hand'
 import { studio } from '@/lib/store'
 import { useStudio } from '@/lib/useStudio'
 import { BRUSHES, CANVAS_H, CANVAS_W, PAPERS, WET, type Stroke } from '@/lib/types'
@@ -623,20 +624,23 @@ export function Sheet() {
     ctx.clearRect(0, 0, size.w, size.h)
 
     const human = presence.cursor('human')
+    // The footprint belongs to whichever hand is on the pointer, which is not
+    // always the person's.
+    const holding = presence.cursor(hand.holder)
     const mode = studio.getUi().mode
     const brush = studio.getUi().brush
 
     // The brush footprint, in paper units, so the size of the mark is known
     // before it is made.
-    if (human.visible && mode === 'paint') {
+    if (holding.visible && mode === 'paint') {
       const r = (BRUSHES[brush.kind].baseWidth * (0.34 + brush.pressure * 0.92)) / 2
       ctx.save()
       ctx.scale(sx, sy)
-      ctx.globalAlpha = human.painting ? 0.45 : 0.28
+      ctx.globalAlpha = holding.painting ? 0.45 : 0.28
       ctx.strokeStyle = ink.guide
       ctx.lineWidth = 1 / ((sx + sy) / 2)
       ctx.beginPath()
-      ctx.arc(human.x, human.y, Math.max(2, r), 0, Math.PI * 2)
+      ctx.arc(holding.x, holding.y, Math.max(2, r), 0, Math.PI * 2)
       ctx.stroke()
       ctx.restore()
     }
@@ -682,12 +686,29 @@ export function Sheet() {
     [toClientSheet],
   )
 
+  /**
+   * Move the hand that is on the pointer, and retire the other one.
+   *
+   * There is one pointer, so only one of the two hands can be on it, and leaving
+   * the other where it was last seen puts two cursors on the sheet with the
+   * wrong one labelled. The exception is an agent painting through the tools
+   * while a person paints by hand, which is two hands for real; presence refuses
+   * to retire the agent's cursor while it is animating a mark, so that case
+   * looks after itself.
+   */
+  const movePointer = useCallback((pt: Point, painting: boolean) => {
+    const holder = hand.holder
+    presence.setPointer(holder, pt.x, pt.y, painting)
+    presence.hidePointer(holder === 'agent' ? 'human' : 'agent')
+  }, [])
+
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
       if (e.button !== 0) return
+      hand.observe(e.nativeEvent)
       const pt = toSheet(e)
       e.currentTarget.setPointerCapture(e.pointerId)
-      presence.setHuman(pt.x, pt.y, true)
+      movePointer(pt, true)
 
       if (ui.mode === 'select') {
         const hit = hitTest(scene, pt)
@@ -719,14 +740,15 @@ export function Sheet() {
       }
       pumpFx()
     },
-    [pumpFx, scene, toSheet, ui.mode, ui.selection],
+    [movePointer, pumpFx, scene, toSheet, ui.mode, ui.selection],
   )
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent) => {
+      hand.observe(e.nativeEvent)
       const pt = toSheet(e)
       const drawing = drawingRef.current
-      presence.setHuman(pt.x, pt.y, Boolean(drawing) || Boolean(dragRef.current))
+      movePointer(pt, Boolean(drawing) || Boolean(dragRef.current))
 
       const drag = dragRef.current
       if (drag) {
@@ -734,7 +756,7 @@ export function Sheet() {
         const dy = pt.y - drag.last.y
         drag.moved += Math.hypot(dx, dy)
         if (drag.moved > CLICK_SLOP && drag.ids.length > 0) {
-          studio.move(drag.ids, dx, dy, 'human')
+          studio.move(drag.ids, dx, dy, hand.holder)
           drag.last = pt
         }
         return
@@ -784,15 +806,16 @@ export function Sheet() {
       }
       pumpFx()
     },
-    [pumpFx, toClientSheet, toSheet],
+    [movePointer, pumpFx, toClientSheet, toSheet],
   )
 
   const finish = useCallback(() => {
     dragRef.current = null
     const drawing = drawingRef.current
     drawingRef.current = null
-    const at = presence.cursor('human')
-    presence.setHuman(at.x, at.y, false)
+    const holder = hand.holder
+    const at = presence.cursor(holder)
+    movePointer(at, false)
 
     if (drawing) {
       /**
@@ -815,7 +838,7 @@ export function Sheet() {
             seed: drawing.seed,
             ground: drawing.ground,
           },
-          'human',
+          holder,
         )
         // Handed over rather than restarted. The tail was laid at this instant
         // and has the whole settle ahead of it, which is exactly the window
@@ -826,7 +849,7 @@ export function Sheet() {
       }
     }
     drawFx()
-  }, [drawFx])
+  }, [drawFx, movePointer])
 
   /* ---------------- keyboard ---------------- */
 
@@ -846,7 +869,7 @@ export function Sheet() {
       if (e.key === 'Escape') studio.select([])
       if ((e.key === 'Backspace' || e.key === 'Delete') && studio.getUi().selection.length) {
         e.preventDefault()
-        studio.erase(studio.getUi().selection, 'human')
+        studio.erase(studio.getUi().selection, hand.holder)
       }
     }
     window.addEventListener('keydown', onKey)
@@ -874,10 +897,10 @@ export function Sheet() {
           onPointerUp={finish}
           onPointerCancel={finish}
           onPointerEnter={(e) => {
-            const pt = toSheet(e)
-            presence.setHuman(pt.x, pt.y, false)
+            hand.observe(e.nativeEvent)
+            movePointer(toSheet(e), false)
           }}
-          onPointerLeave={() => presence.hideHuman()}
+          onPointerLeave={() => presence.hidePointer(hand.holder)}
         />
       </div>
     </div>

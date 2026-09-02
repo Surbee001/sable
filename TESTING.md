@@ -60,6 +60,24 @@ and relays whatever the page registers out to an MCP client over stdio. Sable
 finds the context already there and registers into it, and the panel will say
 **Connected through an extension**.
 
+## If the browser says WebMCP and your agent still cannot call anything
+
+This has been seen: a browser that implements WebMCP natively, a page that
+registers its tools into it successfully, and a model runtime that then refuses
+the command listing them. The page cannot fix that, and it says so in the Agent
+panel rather than leaving you to hunt for a fault in the registration.
+
+The way through is the next section. Every tool is reachable from evaluated
+JavaScript whether or not the bridge works, and the recipe is written into the
+page itself, in the accessibility tree under "How to paint on this page", so an
+agent that has read the DOM has already read it.
+
+If the agent is going to use the mouse instead, that is supported and worth
+doing well. Ask it to press the button called **The agent is holding the brush**
+first. It is a real button in the accessibility tree and it makes the studio
+record those marks as the agent's, which is the difference between a painting
+that shows two authors and one that claims to have had one.
+
 ## If your agent drives browsers rather than speaking WebMCP
 
 Some agents have browser automation and no WebMCP bridge. They read the DOM and

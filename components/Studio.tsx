@@ -11,6 +11,7 @@ import {
 } from '@phosphor-icons/react'
 import { useEffect, useState } from 'react'
 import { conductor } from '@/lib/conductor'
+import { hand, type Holder } from '@/lib/hand'
 import {
   clearTokenInUrl,
   decodeShare,
@@ -67,8 +68,22 @@ export function Studio() {
    * a row of six tabs. So it is pointed at once, until it has been opened.
    */
   const [duetHint, setDuetHint] = useState(false)
+  /**
+   * Which painter the pointer belongs to.
+   *
+   * Almost always the person, and shown only when it is not, because the one
+   * thing worse than an agent's marks being logged as yours is a permanent
+   * label telling you that they are not.
+   */
+  const [holder, setHolder] = useState<Holder>('human')
 
   useEffect(() => setTheme(currentTheme()), [])
+
+  useEffect(() => {
+    hand.start()
+    setHolder(hand.holder)
+    return hand.subscribe(() => setHolder(hand.holder))
+  }, [])
 
   useEffect(() => {
     try {
@@ -293,6 +308,17 @@ export function Studio() {
           </div>
         </div>
 
+      {holder === 'agent' ? (
+          <div className="held" role="status">
+            <span className="dot dot--agent" />
+            <span>
+              The agent is holding the brush. Marks dragged on the sheet are recorded as
+              its own.
+            </span>
+            <Button onClick={() => hand.declare('human')}>Take it back</Button>
+          </div>
+        ) : null}
+
         {toast ? (
           <div className="toast" role="status">
             {toast}
@@ -421,6 +447,17 @@ export function Studio() {
           {replaying ? <Replay onClose={() => setReplaying(false)} /> : null}
         </div>
       </div>
+
+      {holder === 'agent' ? (
+        <div className="held" role="status">
+          <span className="dot dot--agent" />
+          <span>
+            The agent is holding the brush. Marks dragged on the sheet are recorded as
+            its own.
+          </span>
+          <Button onClick={() => hand.declare('human')}>Take it back</Button>
+        </div>
+      ) : null}
 
       {toast ? (
         <div className="toast" role="status">

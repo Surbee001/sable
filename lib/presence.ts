@@ -114,15 +114,37 @@ class Presence {
   /* -------------------- the human -------------------- */
 
   setHuman(x: number, y: number, painting: boolean): void {
-    const c = this.cursors.human
-    if (c.x === x && c.y === y && c.painting === painting && c.visible) return
-    this.cursors.human = { x, y, painting, visible: true }
-    this.emit()
+    this.setPointer('human', x, y, painting)
   }
 
   hideHuman(): void {
-    if (!this.cursors.human.visible) return
-    this.cursors.human = { ...this.cursors.human, visible: false, painting: false }
+    this.hidePointer('human')
+  }
+
+  /**
+   * Move whichever hand is on the pointer.
+   *
+   * Which one that is stopped being obvious the moment an agent without WebMCP
+   * started dragging across the canvas with a real mouse. The cursor it leaves
+   * has to be labelled with whoever is actually holding the brush, or the page
+   * tells you a lie about who is in the room.
+   *
+   * An agent painting through the tools already owns its cursor and is animating
+   * a mark along a path, so a pointer moving at the same time is ignored rather
+   * than allowed to fight it for the same hand.
+   */
+  setPointer(who: Who, x: number, y: number, painting: boolean): void {
+    if (who === 'agent' && this.running) return
+    const c = this.cursors[who]
+    if (c.x === x && c.y === y && c.painting === painting && c.visible) return
+    this.cursors[who] = { x, y, painting, visible: true }
+    this.emit()
+  }
+
+  hidePointer(who: Who): void {
+    if (who === 'agent' && this.running) return
+    if (!this.cursors[who].visible) return
+    this.cursors[who] = { ...this.cursors[who], visible: false, painting: false }
     this.emit()
   }
 

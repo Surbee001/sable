@@ -219,6 +219,47 @@ ever sees. The moment a real agent calls anything, the studio stops completely.
 It can tell, because tool calls are counted, and the tool surface is the thing the
 two of them already share.
 
+## When the bridge does not work
+
+An agent turned up in a browser that advertised WebMCP, found the tools this
+page registers, and never called one. Its runtime did not implement the command
+that lists them, which is not something this page can fix. So it did the sensible
+thing: it read the DOM, pressed the pigment button by its name, dragged a mouse
+across the canvas, and took screenshots to see what it had done.
+
+That is a fine way to paint here and the page now supports it properly.
+
+**It is told it can call the tools anyway.** A client that cannot bridge WebMCP
+can almost always still evaluate JavaScript, and `document.modelContext` is
+right there. The three-line recipe for calling any tool through it is written out
+in the page, in the accessibility tree, next to the note explaining that a mark
+is a drag. An agent that has just read the DOM will have read that too.
+
+**And its marks are its own.** The studio used to record anything dragged across
+the canvas as the human's, because for as long as it had existed that was the
+only way one could be made. So an agent painting with a mouse got a sheet where
+the cursor beside its own work said "You" and the authorship colours showed one
+painter. On a page about two authors sharing a document, that is the worst thing
+it could get wrong.
+
+There is no reliable way to tell an agent's mouse from a person's. Events
+synthesised by injected script are not trusted and a session under automation
+says so, and both are acted on as proof, but neither catches an agent driving the
+real input pipeline of its own browser, which is what the in-app browsers do.
+Guessing from the shape of the movement would mean sometimes telling a person
+they are a robot, which is a worse failure than the one being fixed.
+
+So the page offers a handle instead of inferring an answer: a real, named,
+pressable button saying the brush is the agent's now, sitting in the
+accessibility tree where an agent will find it and a person will not be bothered
+by it. While it is held, the human sees a line saying so and a button to take it
+back. Proof outranks the declaration in the one place it should: an event that
+was not made by a person cannot be laundered into the human's column by a stale
+claim that it was.
+
+Not making the agent guess, and not guessing about the agent, is the same choice
+twice.
+
 ## Keeping the decisions
 
 The studio spent its README arguing that a painting is a list of decisions rather
@@ -292,6 +333,7 @@ lib/
   webmcp.ts       the tool surface, core and contextual
   assess.ts       what the picture needs next, measured
   presence.ts     cursors, and when a mark appears rather than when it exists
+  hand.ts         who is on the other end of the pointer
   conductor.ts    the painter who shows up when nobody else does
   duet.ts         the three scores, and what each part of them is
   subjects.ts     how particular things are painted, pass by pass

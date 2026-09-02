@@ -110,7 +110,18 @@ const TRANSPORT: Record<
   SurfaceStatus['transport'],
   { dot: string; label: string; detail?: string }
 > = {
-  native: { dot: 'dot--live', label: 'Native WebMCP' },
+  native: {
+    dot: 'dot--live',
+    label: 'Native WebMCP',
+    detail:
+      'The browser implements WebMCP itself and every tool below is registered with it. That ' +
+      'is as far as this page can see: whether they reach your agent is up to the runtime ' +
+      'behind the browser, and one has already been met that advertises WebMCP and then ' +
+      'refuses the command that lists the tools. If yours does that, it can almost certainly ' +
+      'still evaluate JavaScript, and document.modelContext is right there. The recipe is ' +
+      'three lines and it is written out in this page, under "How to paint on this page", ' +
+      'where a screen reader or an agent reading the DOM will find it.',
+  },
   bridge: { dot: 'dot--live', label: 'Connected through an extension' },
   local: {
     dot: 'dot--local',
