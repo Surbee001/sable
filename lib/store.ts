@@ -1,6 +1,6 @@
 import { boundsOf, sampleSubpaths, translatePath } from './geometry'
 import { wetField } from './wetfield'
-import { KAWA, type DuetPart, type DuetScore } from './duet'
+import { DEFAULT_LOADOUTS, KAWA, type DuetPart, type DuetScore } from './duet'
 import { presence } from './presence'
 import {
   BRUSHES,
@@ -679,6 +679,22 @@ class Studio {
     this.emit()
   }
 
+  /**
+   * Put a board back exactly as it was, without touching the sheet.
+   *
+   * Used when a session is restored. It deliberately does not tape down a fresh
+   * sheet the way `startDuet` does: the marks are already there, and the whole
+   * point is that the two painters can carry on from where the reload
+   * interrupted them.
+   */
+  restoreDuet(state: DuetState): void {
+    this.duetRun += 1
+    this.duet = { ...state, run: this.duetRun }
+    const mine = this.myPart()
+    if (mine) this.applyLoadout(mine)
+    this.emit()
+  }
+
   endDuet(): void {
     if (!this.duet) return
     this.duet = null
@@ -758,8 +774,9 @@ class Studio {
 
   /** Load the human's brush for the part they have just picked up. */
   private applyLoadout(part: DuetPart): void {
-    if (!part.loadout) return
-    const { layer, ...brush } = part.loadout
+    const spec = part.loadout ?? DEFAULT_LOADOUTS[part.id]
+    if (!spec) return
+    const { layer, ...brush } = spec
     const target = this.resolveLayer(layer)
     this.ui = {
       ...this.ui,

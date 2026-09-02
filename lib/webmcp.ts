@@ -2152,6 +2152,24 @@ class ToolSurface {
 
         try {
           return await tool.execute(input)
+        } catch (err) {
+          /**
+           * A handler that throws must not throw at the browser.
+           *
+           * What happens to a rejected `execute` is up to whatever is bridging
+           * this page, and at least one client answers a rejection by dropping
+           * the connection and starting the page again, which loses everything.
+           * A tool that fails is an ordinary result saying so: the agent can
+           * read it, apologise, and try something else, which is what an error
+           * is for. Nothing in here should be able to take the whole surface
+           * down with it.
+           */
+          const message = err instanceof Error ? err.message : String(err)
+          this.error = `${tool.name} failed: ${message}`
+          return {
+            content: [{ type: 'text', text: `${tool.name} failed: ${message}` }],
+            isError: true,
+          } as ToolResult
         } finally {
           const elapsed = Date.now() - startedAt
           if (elapsed >= MIN_VISIBLE) settle()

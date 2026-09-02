@@ -614,6 +614,42 @@ export const JELLY: DuetScore = {
   ],
 }
 
+/**
+ * The brush to load for a part whose brief does not name one.
+ *
+ * Every part suggested for the agent describes a wash rather than a traced
+ * line, so none of them carried a loadout: the agent names its own numbers in
+ * the paint call and never needed one. Then a person took one, and the studio
+ * handed them whatever brush happened to be in their hand, with no guides on
+ * the paper either, so taking the snow felt like the score had simply stopped
+ * working.
+ *
+ * A part marked for one painter is takeable by the other. That is the whole
+ * design, and it was only half built: the panel offered the part and then gave
+ * the person nothing to paint it with. These are the numbers each part's own
+ * brief asks for, so picking up the ground now loads a wet mop of pale cerulean
+ * and a wash rather than whatever the last mark used.
+ */
+export const DEFAULT_LOADOUTS: Record<string, NonNullable<DuetPart['loadout']>> = {
+  sun: { kind: 'mop', pigment: 'cadmium-red', water: 0.9, pressure: 0.6, opacity: 0.26, fill: true, layer: 'Ground' },
+  'far-hills': { kind: 'mop', pigment: 'cerulean', water: 0.92, pressure: 0.6, opacity: 0.26, fill: true, layer: 'Ground' },
+  water: { kind: 'mop', pigment: 'cobalt', water: 0.95, pressure: 0.6, opacity: 0.2, fill: true, layer: 'Ground' },
+  bank: { kind: 'mop', pigment: 'olive-green', water: 0.72, pressure: 0.6, opacity: 0.4, fill: true, layer: 'Body' },
+  foliage: { kind: 'round', pigment: 'indigo', water: 0.72, pressure: 0.6, opacity: 0.34, fill: true, layer: 'Body' },
+  rocks: { kind: 'round', pigment: 'burnt-sienna', water: 0.4, pressure: 0.6, opacity: 0.5, fill: true, layer: 'Detail' },
+  ground: { kind: 'mop', pigment: 'cerulean', water: 0.94, pressure: 0.6, opacity: 0.1, fill: true, layer: 'Ground' },
+  body: { kind: 'mop', pigment: 'burnt-sienna', water: 0.62, pressure: 0.6, opacity: 0.5, fill: true, layer: 'Body' },
+  tail: { kind: 'mop', pigment: 'burnt-sienna', water: 0.7, pressure: 0.6, opacity: 0.44, fill: true, layer: 'Body' },
+  'tail-tip': { kind: 'round', pigment: 'burnt-sienna', water: 0.45, pressure: 0.6, opacity: 0.6, fill: true, layer: 'Body' },
+  chest: { kind: 'round', pigment: 'burnt-sienna', water: 0.5, pressure: 0.6, opacity: 0.42, fill: true, layer: 'Body' },
+  shadow: { kind: 'mop', pigment: 'cobalt', water: 0.82, pressure: 0.6, opacity: 0.22, fill: true, layer: 'Ground' },
+  bell: { kind: 'mop', pigment: 'permanent-rose', water: 0.7, pressure: 0.6, opacity: 0.3, fill: true, layer: 'Ground' },
+  'far-jelly': { kind: 'mop', pigment: 'permanent-rose', water: 0.74, pressure: 0.6, opacity: 0.16, fill: true, layer: 'Ground' },
+  sea: { kind: 'mop', pigment: 'indigo', water: 0.92, pressure: 0.6, opacity: 0.42, fill: true, layer: 'Ground' },
+  glow: { kind: 'round', pigment: 'permanent-rose', water: 0.72, pressure: 0.6, opacity: 0.34, fill: true, layer: 'Body' },
+  floor: { kind: 'mop', pigment: 'raw-umber', water: 0.44, pressure: 0.6, opacity: 0.3, fill: true, layer: 'Detail' },
+}
+
 export const SCORES: DuetScore[] = [KAWA, FOX, JELLY]
 
 export function findScore(id: string): DuetScore | undefined {

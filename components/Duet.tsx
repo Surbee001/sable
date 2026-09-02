@@ -75,11 +75,11 @@ export function Duet() {
           <span className="turn-who">Yours</span>
           <span className="turn-title">{myPart.title}</span>
           <p className="turn-hint">{myPart.short}</p>
-          {myPart.guides ? (
-            <p className="note">
-              {traced} of {myPart.guides.length} traced.
-            </p>
-          ) : null}
+          <p className="note">
+            {myPart.guides
+              ? `${traced} of ${myPart.guides.length} traced.`
+              : 'No guide for this one. Your brush is loaded for it.'}
+          </p>
           <div className="turn-acts">
             <Button solid onClick={() => studio.finishPart(myPart.id, 'human')}>
               <Check size={11} weight="bold" />

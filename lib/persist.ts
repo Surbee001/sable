@@ -1,5 +1,6 @@
-import { studio } from './store'
-import { BRUSHES, type Scene, type Stroke } from './types'
+import { findScore } from './duet'
+import { studio, type DuetState } from './store'
+import { BRUSHES, type Author, type Scene, type Stroke } from './types'
 
 /**
  * Keeping the painting, and handing it to somebody else.
@@ -18,14 +19,31 @@ import { BRUSHES, type Scene, type Stroke } from './types'
  * a photograph of one, and it is worth a URL to be able to show it.
  */
 
-const KEY = 'sable.sheet.v2'
+const KEY = 'sable.sheet.v3'
 const SAVE_DEBOUNCE_MS = 700
 /** Past this, a link stops being something you can paste into a message. */
 export const SHARE_LIMIT = 60000
 
+/**
+ * What a duet looks like written down.
+ *
+ * The score itself is not stored, only its id: it is code, it ships with the
+ * page, and a board that carried a stale copy of one would resurrect parts that
+ * no longer exist. What has to survive is the state nobody can reconstruct,
+ * which is who took what.
+ */
+interface SavedDuet {
+  score: string
+  held: Record<string, Author>
+  done: string[]
+  mine: string | null
+  traced: number
+}
+
 interface Saved {
-  v: 2
+  v: 3
   scene: Scene
+  duet?: SavedDuet | null
 }
 
 /* ------------------------------------------------------------------ *
@@ -47,7 +65,9 @@ function num(v: unknown, fallback: number): number {
 function clean(raw: unknown): Scene | null {
   if (!raw || typeof raw !== 'object') return null
   const doc = raw as Record<string, unknown>
-  const scene = (doc.v === 2 ? doc.scene : doc) as Record<string, unknown> | undefined
+  const scene = (doc.v === 3 || doc.v === 2 ? doc.scene : doc) as
+    | Record<string, unknown>
+    | undefined
   if (!scene || typeof scene !== 'object') return null
   if (!Array.isArray(scene.strokes) || !Array.isArray(scene.layers)) return null
 
@@ -113,16 +133,68 @@ function clean(raw: unknown): Scene | null {
   }
 }
 
+/**
+ * A board read back out of storage or a link.
+ *
+ * Every part id is checked against the score that shipped with this build, so a
+ * board saved before a part was renamed comes back missing that part rather
+ * than poisoning the panel with one that cannot be taken.
+ */
+function cleanDuet(raw: unknown): DuetState | null {
+  if (!raw || typeof raw !== 'object') return null
+  const d = raw as Record<string, unknown>
+  const score = typeof d.score === 'string' ? findScore(d.score) : undefined
+  if (!score) return null
+  const ids = new Set(score.parts.map((p) => p.id))
+
+  const held: Record<string, Author> = {}
+  if (d.held && typeof d.held === 'object') {
+    for (const [id, who] of Object.entries(d.held as Record<string, unknown>)) {
+      if (ids.has(id) && (who === 'human' || who === 'agent')) held[id] = who
+    }
+  }
+  const done = Array.isArray(d.done)
+    ? (d.done as unknown[]).filter((id): id is string => typeof id === 'string' && ids.has(id))
+    : []
+  const mine = typeof d.mine === 'string' && held[d.mine] === 'human' ? d.mine : null
+
+  return {
+    score,
+    run: 0,
+    held,
+    done,
+    mine,
+    traced: mine && typeof d.traced === 'number' && d.traced >= 0 ? Math.floor(d.traced) : 0,
+  }
+}
+
 /* ------------------------------------------------------------------ *
  * Local storage
  * ------------------------------------------------------------------ */
 
-export function restoreLocal(): Scene | null {
+export interface Restored {
+  scene: Scene
+  duet: DuetState | null
+}
+
+/**
+ * Pick the sheet back up, board and all.
+ *
+ * The painting used to come back on its own and the duet did not, which was the
+ * worst possible half. A bridge dropping and the model reloading the page is a
+ * thing that happens, and it left the marks on the paper and no record of who
+ * had taken what, so the score could not be finished by either painter.
+ */
+export function restoreLocal(): Restored | null {
   try {
     const raw = localStorage.getItem(KEY)
     if (!raw) return null
-    const scene = clean(JSON.parse(raw))
-    return scene && scene.strokes.length > 0 ? scene : null
+    const doc = JSON.parse(raw)
+    const scene = clean(doc)
+    if (!scene) return null
+    const duet = cleanDuet((doc as Record<string, unknown>)?.duet)
+    if (scene.strokes.length === 0 && !duet) return null
+    return { scene, duet }
   } catch {
     return null
   }
@@ -149,7 +221,20 @@ export function startAutosave(): () => void {
     timer = null
     try {
       const scene = studio.getScene()
-      const doc: Saved = { v: 2, scene }
+      const duet = studio.getDuet()
+      const doc: Saved = {
+        v: 3,
+        scene,
+        duet: duet
+          ? {
+              score: duet.score.id,
+              held: duet.held,
+              done: duet.done,
+              mine: duet.mine,
+              traced: duet.traced,
+            }
+          : null,
+      }
       localStorage.setItem(KEY, JSON.stringify(doc))
     } catch {
       // Storage full, or blocked. The painting is still on the screen.
@@ -213,7 +298,7 @@ async function through(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> 
  * opens in a browser that has neither.
  */
 export async function encodeShare(scene: Scene): Promise<string> {
-  const json = JSON.stringify({ v: 2, scene } satisfies Saved)
+  const json = JSON.stringify({ v: 3, scene } satisfies Saved)
   const bytes = new TextEncoder().encode(json)
   if (typeof CompressionStream === 'function') {
     try {

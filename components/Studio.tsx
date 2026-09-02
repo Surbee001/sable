@@ -124,7 +124,10 @@ export function Studio() {
       } else {
         const saved = restoreLocal()
         if (saved && !cancelled) {
-          studio.loadScene(saved, 'human', 'Picked up where you left off')
+          studio.loadScene(saved.scene, 'human', 'Picked up where you left off')
+          // After the scene, because loading one clears the board by design:
+          // a painting arriving from a link has nothing to do with a score.
+          if (saved.duet) studio.restoreDuet(saved.duet)
         }
       }
       if (!cancelled) stop = startAutosave()
