@@ -86,8 +86,6 @@ const TUNING = {
   edgeDarken: 1.5,
   /** Pigment settling into the paper tooth. */
   granulation: 0.62,
-  /** Water pushing dried pigment outward into a cauliflower. */
-  bloom: 0.85,
   /**
    * Pooling.
    *
@@ -682,7 +680,7 @@ export function renderStroke(
    * and never darken one.
    *
    * The effects further down are all consequences of pigment arriving
-   * (granulation, pooling, the drying rim, the backrun) so a lift skips them.
+   * (granulation, pooling, the drying rim) so a lift skips them.
    */
   const lifting = stroke.lift === true
   const paperTone = context.paperTone ?? '#f6f2e8'
@@ -1139,26 +1137,6 @@ export function renderStroke(
     }
   }
 
-  // Blooms. Drop clean water into a wash that has begun to set and it shoves
-  // the pigment outward into a pale cauliflower. Lifting pigment back out of
-  // the buffer is exactly what destination-out does.
-  // A bloom needs the wash to have begun setting before water can push it, so
-  // it starts late, but it has to grow rather than switch on. A threshold on
-  // `settle` put a finished cauliflower into one frame partway through the
-  // drying, which is the same pop the granulation used to make, just later.
-  const bloom = clamp01((dried - 0.38) / 0.62)
-  if (!lifting && water > 0.62 && bloom > 0.02 && widest.length) {
-    applyBloom(
-      bctx,
-      widest.flat(),
-      stroke.seed,
-      water,
-      TUNING.bloom * bloom,
-      `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`,
-      observe,
-    )
-  }
-
   bctx.restore()
 
   // One composite onto the sheet. Multiply, because watercolour is subtractive:
@@ -1171,103 +1149,6 @@ export function renderStroke(
   ctx.drawImage(buf, px.x, px.y, px.w, px.h, px.x, px.y, px.w, px.h)
   ctx.restore()
 }
-
-/** Lift pigment back out of a wet wash to leave a pale cauliflower edge. */
-/**
- * A backrun, which is not a soft glow.
- *
- * Drop clean water into a wash that has started to set and it shoves the
- * pigment ahead of it, leaving a pale patch fenced by a darker, distinctly
- * hard, distinctly wandering line. Painters call the result a cauliflower and
- * spend years learning to want it. Rendering it as a radial gradient produces a
- * lens flare in the middle of the sky instead, so the shape is built as an
- * irregular polygon: clear in the middle, hard at the boundary, with the lifted
- * pigment banked up just outside it.
- */
-function applyBloom(
-  bctx: CanvasRenderingContext2D,
-  poly: Point[],
-  seed: number,
-  water: number,
-  strength: number,
-  ink: string,
-  observe?: (event: MediumEvent) => void,
-): void {
-  const rng = makeRng(seed ^ 0xb100)
-  const b = boundsOf(poly)
-  const across = Math.min(b.w, b.h)
-  if (across < 30) return
-
-  // Not every wet wash backruns, and one that does usually does it once. Making
-  // it happen every time turned the sky into a field of splats.
-  if (rng() > 0.34 + water * 0.4) return
-
-  const lift = Math.min(0.34, strength * (water - 0.6) * 0.85)
-  if (lift < 0.03) return
-
-  const count = rng() < 0.75 ? 1 : 2
-  for (let i = 0; i < count; i++) {
-    const cx = b.x + b.w * (0.2 + rng() * 0.6)
-    const cy = b.y + b.h * (0.2 + rng() * 0.6)
-    const r = Math.min(across * (0.12 + rng() * 0.18), 54)
-    if (r < 8) continue
-    observe?.({
-      kind: 'bloom',
-      x: Math.round(cx),
-      y: Math.round(cy),
-      amount: Math.round(r * 2),
-    })
-
-    // Enough sides that the boundary wanders rather than spikes. The earlier
-    // version used eighteen with heavy wobble and produced starbursts.
-    const sides = 44
-    const squash = 0.66 + rng() * 0.42
-    const tilt = rng() * Math.PI
-    const lobe = 0.72 + rng() * 0.3
-    const ring: Point[] = []
-    for (let k = 0; k < sides; k++) {
-      const a = (k / sides) * Math.PI * 2
-      const wobble =
-        1 + Math.sin(a * 3 + tilt) * 0.16 * lobe + Math.sin(a * 7 + tilt * 2) * 0.09
-      const px = Math.cos(a) * r * wobble
-      const py = Math.sin(a) * r * squash * wobble
-      ring.push({
-        x: cx + px * Math.cos(tilt) - py * Math.sin(tilt),
-        y: cy + px * Math.sin(tilt) + py * Math.cos(tilt),
-      })
-    }
-
-    // Irregular where it meets the wash, soft where it fades. Clipping a
-    // radial falloff to the wandering outline gives both; a bare polygon fill
-    // gives a hole with a cut edge, and a bare gradient gives a lens flare.
-    bctx.save()
-    tracePolygon(bctx, ring)
-    bctx.clip()
-    bctx.globalCompositeOperation = 'destination-out'
-    const g = bctx.createRadialGradient(cx, cy, r * 0.15, cx, cy, r)
-    g.addColorStop(0, `rgba(0,0,0,${lift.toFixed(3)})`)
-    g.addColorStop(0.7, `rgba(0,0,0,${(lift * 0.8).toFixed(3)})`)
-    g.addColorStop(1, 'rgba(0,0,0,0)')
-    bctx.globalAlpha = 1
-    bctx.fillStyle = g
-    bctx.fillRect(cx - r * 1.6, cy - r * 1.6, r * 3.2, r * 3.2)
-    bctx.restore()
-
-    // The pigment the water pushed ahead of it, banked against the boundary.
-    // Faint: it is a tide line, not an outline.
-    bctx.save()
-    bctx.globalCompositeOperation = 'multiply'
-    bctx.globalAlpha = Math.min(0.2, lift * 0.5)
-    bctx.strokeStyle = ink
-    bctx.lineWidth = 1 + r * 0.03
-    bctx.lineJoin = 'round'
-    tracePolygon(bctx, ring)
-    bctx.stroke()
-    bctx.restore()
-  }
-}
-
-
 
 /** Convert pigment properties plus stroke settings into ink colour and alpha. */
 function pigmentInk(

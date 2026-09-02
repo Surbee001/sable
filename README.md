@@ -35,7 +35,7 @@ anywhere, it should beat it here.
 
 It also gives the agent parameters that mean something. `water: 0.9` is not a
 style token. It changes how far pigment creeps into the paper, whether the edge
-blooms, and how far the wash feathers out.
+softens, and how far the wash feathers out.
 
 ## What is simulated
 
@@ -53,7 +53,7 @@ libraries, no pre-baked brush textures.
   pigment with it, leaving the rim darker than the pool.
 - **Granulation.** Heavy pigments settle into the paper tooth and mottle.
   Staining pigments do not. Both scale with how much pigment is in suspension.
-- **Blooms** and **pigment separation**, so a wash is never exactly one hue.
+- **Pigment separation**, so a wash is never exactly one hue.
 - **Wetting in.** A mark arrives pale and tight, creeps outward, deepens, and
   pulls its rim last. You watch every stroke do it, whoever made it.
 
@@ -107,16 +107,16 @@ loud, which meant the agent was working in a medium it could not perceive.
 
 **1. The paint reports what it did.** Every `paint` call comes back with the
 things the water decided, not the things that were asked for: how far past its
-path a wash finished, which side of it went soft, where a cauliflower opened,
-what granulated, what fused with what.
+path a wash finished, which side of it went soft, what granulated, what fused
+with what.
 
 ```
 WHAT THE PAINT DID, which is not what you asked for and is the point:
   • The sky finished about 109 units outside the path you gave it,
     and went softest on its top left.
-  • A cauliflower opened in the far range at (775, 224), about 108 across.
-    The water backran before the wash had set. It cannot be painted out,
-    only worked with.
+  • French Ultramarine granulated in the far range: the heavy particles have
+    dropped into the tooth of the paper and mottled it. Glazing over this
+    will not smooth it out.
   • The near land landed on paper still wet from the far range and fused
     with it. There is no edge between them now, and there is no getting one back.
 ```

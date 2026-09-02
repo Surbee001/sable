@@ -218,7 +218,7 @@ export interface Layer {
  *
  * Everything in this list is already simulated. A wash already creeps past the
  * shape it was given, already pulls a dark rim as it dries, already drops its
- * heavy particles into the tooth, already backruns if it was wet enough and the
+ * heavy particles into the tooth, already softens the side it dried toward and the
  * dice fall that way. None of it was ever reported, so an agent painting here
  * had no way to know any of it had happened, and no way to answer it. It got a
  * picture back and had to re-derive the medium from a JPEG every time.
@@ -228,7 +228,7 @@ export interface Layer {
  * within a week and this has to be exactly what happened.
  */
 export interface MediumEvent {
-  kind: 'spread' | 'bloom' | 'rim' | 'granulation' | 'lost-edge' | 'separation'
+  kind: 'spread' | 'rim' | 'granulation' | 'lost-edge' | 'separation'
   /** Sheet coordinates, where the event has a place.  */
   x?: number
   y?: number

@@ -11,13 +11,13 @@ import { wetField, type WetPatch } from './wetfield'
  * the README: watercolour is not controlled by specifying an outcome, it is
  * controlled by choosing how much water is on the brush and living with where
  * it goes. That is true of the simulation too: a wash here really does creep
- * past its path, really does pull a rim, really does backrun if it was wet
+ * past its path, really does pull a rim, really does granulate if the pigment
  * enough and the seed falls that way, and until now not one word of it ever
  * reached the agent painting.
  *
  * Which meant the agent was not painting in watercolour. It was specifying
  * shapes and receiving a JPEG, and the medium was something that happened to
- * its instructions in between. It could not answer a bloom because it did not
+ * its instructions in between. It could not answer a soft edge because it did not
  * know one had opened. It could not use a soft edge because it did not know
  * which side had gone soft. Every pass started over from a photograph.
  *
@@ -139,7 +139,6 @@ export function reportOn(scene: Scene, ids: string[]): MediumReport {
 
     const spread = list.find((e) => e.kind === 'spread')
     const lost = list.find((e) => e.kind === 'lost-edge')
-    const blooms = list.filter((e) => e.kind === 'bloom')
     const gran = list.find((e) => e.kind === 'granulation')
     const rim = list.find((e) => e.kind === 'rim')
 
@@ -154,13 +153,6 @@ export function reportOn(scene: Scene, ids: string[]): MediumReport {
       )
     } else if (lost?.x !== undefined && lost?.y !== undefined) {
       lines.push(`${capitalise(name)} held its shape but went soft on its ${sideOf(bounds, lost.x, lost.y)}.`)
-    }
-
-    for (const bloom of blooms) {
-      lines.push(
-        `A cauliflower opened in ${name} at (${bloom.x}, ${bloom.y}), about ${bloom.amount} across. ` +
-          'The water backran before the wash had set. It cannot be painted out, only worked with.',
-      )
     }
 
     if (gran) {

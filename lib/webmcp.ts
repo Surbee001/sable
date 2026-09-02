@@ -82,7 +82,7 @@ const STROKE_PROPS = {
     maximum: 1,
     description:
       'How wet the brush is. 0.15 holds a crisp edge; 0.5 is a normal wash; ' +
-      '0.85 spreads softly and can bloom into a cauliflower.',
+      '0.85 floods, spreads well past the path and dries with almost no edge.',
   },
   pressure: {
     type: 'number',
@@ -726,10 +726,10 @@ function coreTools(): ToolDef[] {
         'sweep, rather than picking whichever of the five brushes is least wrong.\n\n' +
         'THE PAINT ANSWERS BACK, and this is what makes this a medium rather than a drawing ' +
         'surface. Every paint call returns what the paint did that you did not ask for: how far ' +
-        'past your path it crept, which side of a wash went soft, where a cauliflower opened, what ' +
+        'past your path it crept, which side of a wash went soft, what ' +
         'granulated, what fused with what. That is not commentary on the result. It is half of the ' +
         'picture, and it is the half you have to reply to.\n' +
-        '  • A bloom is not a mistake to paint out. It is a light shape you now own, and the move ' +
+        '  • A soft side is not a mistake to paint out. It is a lost edge you now own, and the move ' +
         'is to build around it.\n' +
         '  • A lost edge is not a failure to be crisp. It is the soft side of a form, and it starts ' +
         'working the moment you put one hard edge near it.\n' +
@@ -745,7 +745,7 @@ function coreTools(): ToolDef[] {
         'next. If you want them to stay separate things, let the paper close first.\n\n' +
         'HOW THE PAINT BEHAVES, because the renderer really simulates it:\n' +
         '  • Work light to dark. Layers multiply, so you can always deepen a passage and never lighten one.\n' +
-        '  • Water spreads and softens. Above about 0.65 a wash blooms into a pale cauliflower.\n' +
+        '  • Water spreads and softens. Above about 0.65 a wash loses its edge almost entirely.\n' +
         '  • Granulating pigments (ultramarine, cerulean, burnt sienna) mottle into the paper. ' +
         'Staining ones (phthalo blue, quinacridone rose) stay smooth and hold a hard edge.\n' +
         '  • Painting into paper that is still wet bleeds outward and fuses. Both the layer and ' +
@@ -859,7 +859,7 @@ function coreTools(): ToolDef[] {
             describeOpen(medium.open),
             '',
             'Here is the sheet. Answer what the paint did rather than starting over: ' +
-              'a bloom wants something built around it, a lost edge wants one crisp mark near it, ' +
+              'a lost edge wants one crisp mark near it, ' +
               'and a passage that is still open will never be this workable again.',
           ].join('\n'),
           snapshotScene(scene),
