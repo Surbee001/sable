@@ -26,6 +26,11 @@ export function AgentNotice() {
         currently in use is the pressed one.
       </p>
       <p>
+        The Duet panel opens a score: one picture broken into named parts, shared with an
+        agent. There are no turns. Any part nobody is holding can be taken by either
+        painter, and the button on a part is how you say you are painting it.
+      </p>
+      <p>
         The same actions, and a good deal more, are registered as tools on
         document.modelContext, which is the intended way to drive this page if your client
         can reach them.

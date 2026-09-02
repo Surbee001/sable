@@ -3,7 +3,9 @@ import { ensureModelContext } from './fallback-context'
 import { boundsOf, isFaceted, isValidPath, relaxPath, samplePath, scalePath } from './geometry'
 import { PIGMENTS, SCHEMES, findScheme, getPigment, resolvePigment } from './palette'
 import { assess } from './assess'
+import { SCORES, findScore, type DuetPart } from './duet'
 import { describeOpen, reportOn } from './medium'
+import { decodeShare, shareLink } from './persist'
 import { wetField } from './wetfield'
 import { perceive } from './perceive'
 import { SUBJECTS, findSubject } from './subjects'
@@ -378,10 +380,111 @@ function toPaintInput(
 
 interface ToolDef {
   name: string
+  /**
+   * The readable name, which the WebMCP dictionary puts here rather than in the
+   * annotations block where MCP keeps it. This is what a client can show a
+   * person in place of a snake-case identifier.
+   */
+  title?: string
   description: string
   inputSchema: Record<string, unknown>
-  annotations?: { readOnlyHint?: boolean }
+  /**
+   * The annotation block.
+   *
+   * WebMCP's own dictionary defines two of these, and both matter here.
+   * `readOnlyHint` is how a client knows which calls it can make freely, and
+   * `untrustedContentHint` says that what comes back was written by somebody
+   * other than this page: a painting can now arrive from a link, and the notes
+   * on its marks are that person's words travelling into a model's context.
+   * Marking the tools that read them is the whole reason the hint exists.
+   *
+   * The MCP-level hints are carried alongside for clients that read them. A
+   * browser implementing only the WebMCP dictionary will drop them, which costs
+   * nothing and is the right way round: the standard fields are the ones the
+   * behaviour depends on.
+   */
+  annotations?: {
+    readOnlyHint?: boolean
+    untrustedContentHint?: boolean
+    destructiveHint?: boolean
+    idempotentHint?: boolean
+    openWorldHint?: boolean
+  }
   execute: (input: never) => Promise<ToolResult> | ToolResult
+}
+
+/**
+ * The rest of each tool's annotation block, kept in one table.
+ *
+ * A name and a paragraph of prose is what a tool needs to be *called* well. It
+ * is not what a client needs to *present* one. A title gives a person something
+ * readable in a permission dialog instead of a snake-case identifier, and the
+ * destructive and idempotent hints tell a client which calls it may retry, and
+ * which two of these take a painting away from somebody and had better be
+ * confirmed first.
+ *
+ * It sits here rather than inline because these are properties of the toolbox
+ * seen as a whole. Deciding tool by tool which ones are destructive is how a
+ * manifest ends up with three of them and a fourth that quietly is not.
+ */
+const TITLES: Record<string, string> = {
+  look_at_canvas: 'Look at the sheet',
+  inspect_region: 'Look closely at one passage',
+  squint: 'Squint at it',
+  read_painting: 'Read every mark',
+  assess_painting: 'What the painting needs next',
+  paint: 'Paint',
+  revise_stroke: 'Revise marks already down',
+  transform_strokes: 'Move and resize marks',
+  lift_strokes: 'Lift marks off the sheet',
+  undo: 'Undo',
+  redo: 'Redo',
+  clear_sheet: 'Take everything off the sheet',
+  find_strokes: 'Find marks',
+  select_strokes: "Point at marks on the human's screen",
+  set_brush: "Load the human's brush",
+  list_palette: 'Pigments, brushes and papers',
+  how_to_paint: 'How a particular thing is painted',
+  suggest_palette: 'Suggest a limited palette',
+  manage_layers: 'Layers',
+  set_sheet: 'Paper and title',
+  share_painting: 'Link to this painting',
+  open_painting: 'Open a shared painting',
+  describe_selection: 'The mark the human is pointing at',
+  revise_selection: 'Revise what the human selected',
+  duet_start: 'Start a duet',
+  duet_status: 'The duet board',
+  duet_take_part: 'Take a part',
+  duet_finish_part: 'Finish a part',
+  duet_release_part: 'Put a part back',
+}
+
+/**
+ * The hints that are true of a tool but tedious to repeat inline.
+ *
+ * Kept in one table because these are properties of the toolbox seen whole.
+ * Deciding tool by tool which ones are destructive is how a manifest ends up
+ * with three of them and a fourth that quietly is not.
+ *
+ * `untrustedContentHint` goes on everything that can read back a note somebody
+ * else wrote. Once a painting can arrive from a link, the notes on its marks are
+ * a stranger's prose being handed to a model, and the tools that surface them
+ * are exactly these.
+ */
+const HINTS: Record<string, ToolDef['annotations']> = {
+  read_painting: { untrustedContentHint: true },
+  find_strokes: { untrustedContentHint: true },
+  describe_selection: { untrustedContentHint: true },
+  assess_painting: { untrustedContentHint: true },
+  open_painting: { destructiveHint: true, untrustedContentHint: true },
+  transform_strokes: { idempotentHint: true },
+  lift_strokes: { destructiveHint: true },
+  clear_sheet: { destructiveHint: true },
+  select_strokes: { idempotentHint: true },
+  set_brush: { idempotentHint: true },
+  set_sheet: { idempotentHint: true },
+  duet_start: { destructiveHint: true },
+  duet_release_part: { idempotentHint: true },
 }
 
 /** Tools that are always available, whatever state the studio is in. */
@@ -1442,6 +1545,64 @@ function coreTools(): ToolDef[] {
         return show('Sheet updated.', snapshotScene(studio.getScene(), { width: 760 }))
       },
     },
+
+    {
+      name: 'share_painting',
+      description:
+        'Turn the painting into a link and hand it to the human to send to somebody. What ' +
+        'travels in the link is the document, not a picture of it: every mark arrives as a ' +
+        'mark, with its pigment, its water, its brush and its path, so whoever opens it can ' +
+        'select any of them and change it, or ask you to. That is the whole difference between ' +
+        'sending a painting and sending a photograph of one. Give the human the URL exactly as ' +
+        'it comes back.',
+      annotations: { readOnlyHint: true },
+      inputSchema: { type: 'object', properties: {} },
+      execute: async () => {
+        const scene = studio.getScene()
+        if (scene.strokes.length === 0) return fail('The sheet is blank. There is nothing to send.')
+        const { url, over } = await shareLink(scene)
+        return say(
+          `${url}\n\n${scene.strokes.length} marks travel in that link as editable objects.` +
+            (over
+              ? ' It is long enough that some chat clients will break it across lines, so tell ' +
+                'them to paste the whole thing.'
+              : ''),
+          { url, strokes: scene.strokes.length },
+        )
+      },
+    },
+
+    {
+      name: 'open_painting',
+      description:
+        'Open a painting somebody sent, from a Sable link or from the token after the #p= in ' +
+        'one. Every mark in it becomes a live, editable mark on this sheet, so you can be asked ' +
+        'to change something in a picture you did not paint. This replaces what is on the sheet ' +
+        'now, so ask first unless the human has just given you the link.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          link: {
+            type: 'string',
+            description: 'The whole URL, or just the token from after #p=.',
+          },
+        },
+        required: ['link'],
+      },
+      execute: async (input: { link?: string }) => {
+        const raw = String(input?.link ?? '').trim()
+        if (!raw) return fail('Pass the link.')
+        const token = /[#&]p=([A-Za-z0-9\-_]+)/.exec(raw)?.[1] ?? raw
+        const scene = await decodeShare(token)
+        if (!scene) return fail('That link does not carry a painting this studio can read.')
+        studio.loadScene(scene, 'agent', `Opened "${scene.title}" from a link`)
+        return show(
+          `Opened "${scene.title}". ${scene.strokes.length} marks, all of them editable. ` +
+            'Call assess_painting to see what it needs.',
+          snapshotScene(studio.getScene(), { width: 760 }),
+        )
+      },
+    },
   ]
 }
 
@@ -1562,89 +1723,213 @@ function contextualTools(): ToolDef[] {
   /* ---------------- the duet ---------------- */
 
   const duet = studio.getDuet()
+
+  if (!duet) {
+    tools.push({
+      name: 'duet_start',
+      description:
+        'Open a score and paint one with the human. A score is a board of named parts of a ' +
+        'single picture, laid out in advance with a brief for each. Nobody takes turns: any ' +
+        'free part can be claimed by either of you at any moment, so the two of you have to ' +
+        'agree out loud about who is doing what. Available: ' +
+        SCORES.map((s) => `"${s.id}" (${s.title}, ${s.parts.length} parts, ${s.subtitle})`).join('; ') +
+        '. This tapes down a fresh sheet, so ask before you call it if there is work on the ' +
+        'current one.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          score: {
+            type: 'string',
+            enum: SCORES.map((s) => s.id),
+            description: SCORES.map((s) => `${s.id}: ${s.blurb}`).join(' '),
+          },
+        },
+        required: ['score'],
+      },
+      execute: (input: { score?: string }) => {
+        const score = findScore(String(input?.score ?? ''))
+        if (!score) {
+          return fail(`No score called "${String(input?.score)}". Try ${SCORES.map((s) => s.id).join(', ')}.`)
+        }
+        studio.startDuet(score)
+        return show(
+          `"${score.title}" is open, on a fresh sheet. ${score.parts.length} parts, none of them ` +
+            'taken. Call duet_status to see the board, then take one and paint it. Tell the ' +
+            'human which you have taken so they do not start the same one.',
+          snapshotScene(studio.getScene(), { width: 760 }),
+        )
+      },
+    })
+  }
+
   if (duet) {
-    const step = duet.score.steps[duet.index] ?? null
-    const finished = duet.index >= duet.score.steps.length
+    const parts = duet.score.parts
+    const done = new Set(duet.done)
+    const free = studio.freeParts()
+    const mine = parts.filter((p) => duet.held[p.id] === 'agent')
+    const finished = done.size >= parts.length
+
+    const stateOf = (p: DuetPart): string => {
+      if (done.has(p.id)) return 'painted'
+      const holder = duet.held[p.id]
+      if (holder === 'agent') return 'you have it'
+      if (holder === 'human') return 'the human has it'
+      const blocked = studio.blockedBy(p)
+      if (blocked.length > 0) return `free, but wants ${blocked.map((b) => b.title).join(' and ')} first`
+      return 'free'
+    }
 
     tools.push({
       name: 'duet_status',
       description:
-        `"${duet.score.title}" is being painted in turns, ${duet.score.steps.length} passes ` +
-        'alternating between the human and you. This returns the whole score, which pass is ' +
-        'current, whose turn it is, and the brief for that pass, with an image of the sheet. ' +
-        'Call it before you paint anything: your passes are built on marks the human just made, ' +
-        `and where they actually put them is not where the score imagined they would.`,
+        `"${duet.score.title}" is open: ${parts.length} parts of one picture, shared with the ` +
+        'human. There are no turns here. This returns the board, which parts are painted, which ' +
+        'the human has in hand, which you have, and which are free, with the brief for each and ' +
+        'an image of the sheet. Call it before you take anything and again after the human has ' +
+        'painted, because your parts sit on marks they made and where they actually put them is ' +
+        'not where the score imagined they would.',
       annotations: { readOnlyHint: true },
       inputSchema: { type: 'object', properties: {} },
       execute: () => {
-        const scene = studio.getScene()
         const lines = finished
-          ? [`"${duet.score.title}" is finished. All ${duet.score.steps.length} passes are done.`]
+          ? [`"${duet.score.title}" is finished. All ${parts.length} parts are painted.`]
           : [
-              `"${duet.score.title}", pass ${duet.index + 1} of ${duet.score.steps.length}.`,
-              step?.by === 'agent'
-                ? `It is your turn: ${step.title}.`
-                : `It is the human's turn: ${step?.title}. Wait for them.`,
-              step ? step.hint : '',
+              `"${duet.score.title}": ${done.size} of ${parts.length} parts painted.`,
+              mine.length
+                ? `You are holding ${mine.map((p) => `"${p.title}"`).join(' and ')}.`
+                : 'You are not holding anything. Take a free part to start.',
+              parts
+                .map((p) => `  ${p.title} [${stateOf(p)}] ${p.short}`)
+                .join('\n'),
             ]
-        return show(lines.filter(Boolean).join('\n\n'), snapshotScene(scene, { width: 760 }), {
-          title: duet.score.title,
-          pass: duet.index + 1,
-          of: duet.score.steps.length,
-          turn: finished ? 'done' : step?.by,
-          current: step
-            ? {
-                id: step.id,
-                title: step.title,
-                brief: step.hint,
-                by: step.by,
-                // Where the human is being asked to draw, so you can see what
-                // is about to appear and where your own pass will have to sit.
-                guides: step.guides ?? undefined,
-                traced: step.by === 'human' ? duet.traced : undefined,
-              }
-            : null,
-          score: duet.score.steps.map((st, i) => ({
-            title: st.title,
-            by: st.by,
-            state: i < duet.index ? 'done' : i === duet.index ? 'current' : 'waiting',
-          })),
-        })
+        return show(
+          lines.filter(Boolean).join('\n\n'),
+          snapshotScene(studio.getScene(), { width: 760 }),
+          {
+            score: duet.score.id,
+            title: duet.score.title,
+            painted: done.size,
+            of: parts.length,
+            holding: mine.map((p) => p.id),
+            parts: parts.map((p) => ({
+              id: p.id,
+              title: p.title,
+              suits: p.by,
+              state: stateOf(p),
+              brief: p.hint,
+              // Where the human is being guided to draw, so you can see what is
+              // about to appear and where your own parts will have to sit.
+              guides: p.guides ?? undefined,
+            })),
+          },
+        )
       },
     })
 
-    if (step && step.by === 'agent') {
+    if (!finished && free.length > 0) {
       tools.push({
-        name: 'duet_complete_turn',
+        name: 'duet_take_part',
         description:
-          `Hand the brush back. Your current pass is "${step.title}". ${step.hint}\n\n` +
-          'Paint it with the ordinary paint tool first, looking at the sheet before and after, ' +
-          'then call this to end your turn and pass to the human. Do not call it before you ' +
-          'have actually painted anything.',
-        inputSchema: {
+          'Put your hand on one part of the picture, so the human knows not to start it. This ' +
+          'is the only coordination in a duet and it is worth doing before you paint rather ' +
+          'than after. Free right now: ' +
+          free
+            .map((p) => {
+              const blocked = studio.blockedBy(p)
+              return `"${p.id}" (${p.title}, suits the ${p.by}${
+                blocked.length ? `, wants ${blocked.map((b) => b.title).join(' and ')} down first` : ''
+              })`
+            })
+            .join('; ') +
+          '. A part marked for the human is still yours to take if they have said so; ' +
+          'nothing here is locked to one painter.',
+          inputSchema: {
           type: 'object',
           properties: {
+            part: {
+              type: 'string',
+              enum: free.map((p) => p.id),
+              description: free.map((p) => `${p.id}: ${p.short}`).join(' '),
+            },
+          },
+          required: ['part'],
+        },
+        execute: (input: { part?: string }) => {
+          const claim = studio.takePart(String(input?.part ?? ''), 'agent')
+          if (!claim.ok || !claim.part) return fail(claim.why)
+          const blocked = studio.blockedBy(claim.part)
+          return say(
+            `You have "${claim.part.title}".\n\n${claim.part.hint}` +
+              (blocked.length
+                ? `\n\nNothing stops you, but ${blocked
+                    .map((b) => b.title.toLowerCase())
+                    .join(' and ')} is not painted yet, and this part is meant to sit on it.`
+                : ''),
+            { part: claim.part.id, brief: claim.part.hint },
+          )
+        },
+      })
+    }
+
+    if (mine.length > 0) {
+      const brief = mine.map((p) => `"${p.title}": ${p.hint}`).join('\n\n')
+      tools.push({
+        name: 'duet_finish_part',
+        description:
+          `Call a part painted and let it go, so the board shows it done. You are holding ` +
+          `${mine.map((p) => `"${p.id}"`).join(' and ')}.\n\n${brief}\n\n` +
+          'Paint it with the ordinary paint tool first, looking at the sheet before and after. ' +
+          'Do not call this before you have actually put paint down. Then take another free ' +
+          'part, or say what you are leaving for the human.',
+          inputSchema: {
+          type: 'object',
+          properties: {
+            part: {
+              type: 'string',
+              enum: mine.map((p) => p.id),
+              description: 'Which of the parts you are holding is finished.',
+            },
             note: {
               type: 'string',
               description: 'One line for the human on what you did and why.',
             },
           },
+          required: ['part'],
         },
-        execute: (input: { note?: string }) => {
-          const finishedStep = step
-          const next = studio.advanceDuet()
+        execute: (input: { part?: string; note?: string }) => {
+          const part = studio.finishPart(String(input?.part ?? ''), 'agent')
+          if (!part) return fail(`You are not holding a part called "${String(input?.part)}".`)
           if (typeof input?.note === 'string' && input.note.trim()) {
             studio.noteFromAgent(input.note.trim())
           }
+          const left = studio.freeParts()
           return show(
-            `Done with "${finishedStep.title}". ` +
-              (next
-                ? next.by === 'human'
-                  ? `Over to the human for "${next.title}".`
-                  : `Your turn again: ${next.title}.`
-                : 'That was the last pass. The painting is finished.'),
+            `"${part.title}" is done. ` +
+              (left.length === 0
+                ? 'Every part is off the board. The painting is finished.'
+                : `Still free: ${left.map((p) => p.title).join(', ')}.`),
             snapshotScene(studio.getScene(), { width: 760 }),
           )
+        },
+      })
+
+      tools.push({
+        name: 'duet_release_part',
+        description:
+          'Put a part back on the board without painting it, so the human can take it instead. ' +
+          `You are holding ${mine.map((p) => `"${p.id}"`).join(' and ')}. Use this the moment ` +
+          'they say they want one of them.',
+          inputSchema: {
+          type: 'object',
+          properties: {
+            part: { type: 'string', enum: mine.map((p) => p.id) },
+          },
+          required: ['part'],
+        },
+        execute: (input: { part?: string }) => {
+          const id = String(input?.part ?? '')
+          if (!studio.releasePart(id, 'agent')) return fail(`You are not holding "${id}".`)
+          return say(`Put "${id}" back. It is free for the human now.`)
         },
       })
     }
@@ -1673,9 +1958,21 @@ function surfaceKey(): string {
     scene.strokes.length > 0 ? 'has' : 'empty',
     canUndo ? 'u' : '-',
     canRedo ? 'r' : '-',
-    // Each pass of a duet carries its own brief inside the tool description.
-    studio.getDuet() ? `duet:${studio.getDuet()?.index}` : '-',
+    // A duet's tools carry the board inside their descriptions: which parts are
+    // free, which the agent is holding, and the brief for each. All three change
+    // the shape of the toolbox, so all three belong in the key.
+    duetKey(),
   ].join('|')
+}
+
+function duetKey(): string {
+  const duet = studio.getDuet()
+  if (!duet) return 'no-duet'
+  const held = Object.entries(duet.held)
+    .map(([id, who]) => `${id}:${who}`)
+    .sort()
+    .join(',')
+  return `duet:${duet.score.id}:${duet.done.slice().sort().join(',')}:${held}`
 }
 
 /**
@@ -1798,6 +2095,8 @@ class ToolSurface {
 
     return {
       ...tool,
+      title: tool.title ?? TITLES[tool.name],
+      annotations: { ...HINTS[tool.name], ...tool.annotations },
       execute: async (input: never) => {
         if (this.hold) {
           clearTimeout(this.hold)

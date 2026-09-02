@@ -86,6 +86,8 @@ as the fallback. All of it is in `lib/webmcp.ts`.
 | `suggest_palette` | Seven limited palettes, with a role per pigment |
 | `list_palette` | Pigments, brushes and papers, and how each behaves |
 | `manage_layers`, `set_sheet` | Layers, wetness, paper, title |
+| `share_painting` | Turns the sheet into a link that carries the marks, not a picture |
+| `open_painting` | Opens somebody else's link, every mark still editable |
 
 ### The sheet answers back
 
@@ -177,24 +179,75 @@ not have produced.
 
 A blank sheet never forces two people to depend on each other. A score does.
 
-**Evening river** is a landscape in twelve alternating passes. The agent lays
-the sun, the far hills, the river and the bank. You trace the ridge, break the
-water with ripples, grow the grass and draw the pine. Then it hangs the foliage
-off the branches *you actually drew*, which is not where the score imagined they
-would be, so its brief sends it to look first.
+A score is one picture broken into named **parts**, each with a brief, a
+suggested painter and, where a hand is meant to make the mark, a guide to trace.
+There are three of them: **Evening river**, a landscape; **The fox**, an animal
+that arrives as one flooded silhouette; and **Deep water**, a jellyfish painted
+on bare paper and then glazed over with the sea, which is the order watercolour
+actually demands and the reason the medium is painted light to dark.
 
-The guide shows where a mark goes but does not make it: what lands on the paper
-is your line. Your brush is loaded for you at the start of each pass.
+### Nobody waits
 
-Two more tools exist while a score runs: `duet_status`, and `duet_complete_turn`
-whose description **is** the brief for the current pass, so the agent's
-instructions change every time the turn comes back.
+The first version of this alternated. Twelve passes, human, agent, human, agent,
+nobody allowed to touch the paper out of turn. It proved that the two of them can
+work on one picture the way a metronome proves you can play music, and half the
+time you spent in it was spent being told to wait.
 
-**Turns hand over by themselves.** There is no button. A duet with a button on
-the agent's passes is a slideshow the human advances. The studio waits a beat
-and paints the pass, unless something is already attached, which it knows
-because tool calls are counted in two kinds: one that changes the painting means
-the turn is taken, one that only looks means something is still thinking.
+So the queue is gone. Every part with nothing standing in front of it is open to
+either painter at any moment, and the only rule left is the honest one: two
+brushes must not land on the same part. **Taking a part is how you say so**, and
+it is a click for the human and `duet_take_part` for the agent, both writing to
+the same board. That makes the coordination a real negotiation over a shared
+surface rather than a turn the software hands out. `duet_release_part` exists for
+the moment one of them says they wanted that one.
+
+`by` is a suggestion about which painter a part suits, and the panel says so.
+Take any of them.
+
+Dependencies advise rather than refuse. Foliage hung on branches nobody has drawn
+is a worse painting, not an error, so the panel greys the part and names what is
+missing, and lets you take it anyway.
+
+Two things survive from the old version and both earn their place. The parts
+still make the painters need each other: the agent's foliage hangs off branches
+the human drew, and where those actually ended is not where the score imagined
+they would be, so its brief sends it to look first. And **the studio stands in**.
+Open this page with no agent behind it and the parts marked for one get painted
+anyway, one at a time, at the speed of somebody actually painting them, because a
+collaboration that needs a collaborator before it shows anything is one nobody
+ever sees. The moment a real agent calls anything, the studio stops completely.
+It can tell, because tool calls are counted, and the tool surface is the thing the
+two of them already share.
+
+## Keeping the decisions
+
+The studio spent its README arguing that a painting is a list of decisions rather
+than a bitmap while reloading the tab destroyed every one of them, and while the
+only thing you could take away was a PNG, which is exactly the flattened
+unrevisable object the argument is against.
+
+**The sheet writes itself down** as you work and comes back when you return.
+
+**The painting packs into a link.** What travels is the document: every mark
+arrives as a mark, with its pigment, its water, its brush, its author and its
+seed, so the person who opens it can select any of them and change it, or ask
+their own agent to. It re-renders identically because the seeds travel too. A
+study of a hundred marks gzips to a URL you can paste into a message. `Share`
+does it for the human, `share_painting` for the agent, and `open_painting` reads
+one back.
+
+That last one is also why the reading tools now carry
+`untrustedContentHint`. Once a painting can arrive from a stranger, the notes on
+its marks are that stranger's prose being handed to a model, and saying so is
+what the hint is for.
+
+**And it replays.** Because the document is already a list of decisions in the
+order they were taken, each carrying who took it, playing the painting back is a
+slice of that list and a clock. Nothing is recorded. A study that arrived in a
+link plays back exactly as well as one painted in the room, which no amount of
+screen recording would manage. Watching it is the clearest thing this project has
+to say: a finished sheet looks like one painting, and played back, with each mark
+named as it lands, it is visibly a conversation.
 
 ## Try it
 
@@ -203,9 +256,14 @@ The sheet starts blank. Paint on it, or open **Duet** and paint one in turns.
 - Press **V**, click any mark, and the Mark panel takes it apart: pigment,
   water, pressure, brush, its literal SVG path. Change any of it.
 - Press **Tab** to hide the panels and leave only the paper.
-- Open **Duet** and start *Evening river*.
-- Ask an agent: *"Assess the painting and do whatever it needs most."* Or select
-  a mark and say *"push this one back."*
+- Open **Duet**, pick a score, and take whatever part you like. The studio takes
+  the rest if nothing is connected.
+- Press **Replay** and watch it get made, mark by mark, colour-coded by who made
+  each one.
+- Press **Share**, send the link to somebody, and watch them change your marks.
+- Ask an agent: *"Assess the painting and do whatever it needs most."* Or
+  *"start the fox and take the parts you want, tell me which ones you left me."*
+  Or select a mark and say *"push this one back."*
 
 See [TESTING.md](TESTING.md) for how to connect an agent and a console self
 check that needs none.
@@ -234,11 +292,12 @@ lib/
   webmcp.ts       the tool surface, core and contextual
   assess.ts       what the picture needs next, measured
   presence.ts     cursors, and when a mark appears rather than when it exists
-  conductor.ts    whose turn it is, without anyone pressing anything
-  duet.ts         the score
+  conductor.ts    the painter who shows up when nobody else does
+  duet.ts         the three scores, and what each part of them is
   subjects.ts     how particular things are painted, pass by pass
   fallback-context.ts  our own document.modelContext, for when nothing supplies one
   snapshot.ts     offscreen rendering, so tools can return images
+  persist.ts      the sheet written down, and packed into a link
 components/       the studio UI
 app/globals.css   the design system, including every swatch colour
 ```

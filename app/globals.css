@@ -1576,3 +1576,271 @@ body {
   height: auto;
   max-width: 32px;
 }
+
+/* ------------------------------------------------------------------ *
+ * Choosing a score
+ * ------------------------------------------------------------------ */
+
+.scores {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.score-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 11px 12px 10px;
+  text-align: left;
+  font: inherit;
+  color: var(--text-soft);
+  background: var(--card-sunk);
+  border: 0;
+  border-radius: var(--radius-inner);
+  cursor: pointer;
+  transition:
+    background 0.16s var(--ease),
+    transform 0.16s var(--ease);
+}
+
+.score-card:hover {
+  background: var(--accent-soft);
+  transform: translateY(-1px);
+}
+
+.score-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.score-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.score-card-sub {
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+
+.score-card-blurb {
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-soft);
+}
+
+.score-card-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--accent);
+}
+
+/* ------------------------------------------------------------------ *
+ * The board
+ * ------------------------------------------------------------------ */
+
+.score-step--mine {
+  color: var(--text);
+  background: var(--accent-soft);
+}
+
+.score-step--agent {
+  color: var(--text-dim);
+  background: var(--agent-soft);
+}
+
+.score-step--free {
+  color: var(--text-soft);
+}
+
+.score-state {
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.score-take {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 19px;
+  padding: 0 8px;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--accent);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  opacity: 0.72;
+  transition:
+    background 0.16s var(--ease),
+    opacity 0.16s var(--ease);
+}
+
+.score-step:hover .score-take,
+.score-take:focus-visible {
+  opacity: 1;
+  background: var(--accent-soft);
+}
+
+.turn-acts {
+  display: flex;
+  gap: 4px;
+}
+
+/* ------------------------------------------------------------------ *
+ * Pointing at the duet, once
+ * ------------------------------------------------------------------ */
+
+.hint {
+  display: block;
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 9px 11px;
+  text-align: left;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-soft);
+  background: var(--accent-soft);
+  border: 0;
+  border-radius: var(--radius-inner);
+  cursor: pointer;
+}
+
+.hint strong {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.hint--dock {
+  margin: 0 12px 8px;
+  width: auto;
+}
+
+/* A quiet pip on the tab, so the pointer has something to point at. */
+.tab-pip {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-left: 5px;
+  vertical-align: 1px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pip 2.4s var(--ease) infinite;
+}
+
+@keyframes pip {
+  0%,
+  70%,
+  100% {
+    opacity: 0.35;
+  }
+  35% {
+    opacity: 1;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Replay
+ * ------------------------------------------------------------------ */
+
+.replay {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 7px 10px;
+  background: var(--card-raised);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--lift);
+}
+
+.replay-acts {
+  display: flex;
+  gap: 2px;
+}
+
+.replay-range {
+  flex: 1;
+  min-width: 80px;
+}
+
+.replay-read {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  font-size: 10.5px;
+  color: var(--text-soft);
+}
+
+.replay-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.replay-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 34ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.replay-split {
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+@media (max-width: 880px) {
+  .replay-split,
+  .replay-line {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * A line that says what just happened
+ * ------------------------------------------------------------------ */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 26px;
+  z-index: 40;
+  transform: translateX(-50%);
+  max-width: min(440px, calc(100vw - 32px));
+  padding: 9px 14px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--card-raised);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--lift);
+  animation: toast-in 0.24s var(--ease);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+}

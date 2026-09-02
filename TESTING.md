@@ -37,7 +37,10 @@ Needs a public URL, so deploy first, then open the link inside ChatGPT and ask
 it to paint. Good things to say:
 
 - *"Assess the painting and do whatever it needs most."*
-- *"Start the duet and take your turns."*
+- *"Start the fox, take the parts you want, and tell me which ones you are
+  leaving me."*
+- *"Take the shadow, but look at where my legs actually landed first."*
+- *"Share this and give me the link."*
 - Select a mark, then: *"push this one back."*
 
 ### Chrome with the flag
@@ -72,6 +75,8 @@ const tools = await ctx.getTools()
 const call = async (name, args) =>
   JSON.parse(await ctx.executeTool(tools.find((t) => t.name === name), JSON.stringify(args)))
 
+await call('duet_start', { score: 'fox' })
+await call('duet_take_part', { part: 'body' })
 await call('assess_painting', {})
 await call('paint', { strokes: [
   { path: 'M 200 240 C 320 140 520 300 720 200', pigment: 'indigo', water: 0.5, opacity: 0.6 },

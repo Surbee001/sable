@@ -211,7 +211,21 @@ export function Sheet() {
 
     // Live, for the same reason drawFx reads it live: this runs off presence as
     // well as off a render, and presence does not wait for React.
-    const scene = studio.getScene()
+    const full = studio.getScene()
+    /**
+     * A replay is a slice, not a recording.
+     *
+     * Because the painting is a list of decisions in the order they were taken,
+     * playing it back needs nothing captured while the work happens: cut the
+     * list short and render what is left. A study that arrived in a link plays
+     * back exactly as well as one painted in the room, which would not be true
+     * of anything that had to be filmed.
+     */
+    const cut = studio.getUi().replay
+    const scene =
+      cut === null
+        ? full
+        : { ...full, strokes: studio.chronological().slice(0, cut) }
     const order = paintOrder(scene).filter((s) => presence.isSettled(s.id))
     const prev = paintedRef.current
 
@@ -510,25 +524,24 @@ export function Sheet() {
     ctx.clearRect(0, 0, size.w, size.h)
     ctx.scale(sx, sy)
 
-    // Guides for the pass the human is on. The one they are about to trace is
-    // drawn plainly; the rest of the pass waits behind it. What they actually
-    // paint is their own line, not the guide: this shows where a mark goes, it
-    // does not make the mark.
-    const step = duet && duet.index < duet.score.steps.length
-      ? duet.score.steps[duet.index]
-      : null
-    if (step?.by === 'human' && step.guides) {
+    // Guides for the part the human has picked up. The one they are about to
+    // trace is drawn plainly; the rest of the part waits behind it. What they
+    // actually paint is their own line, not the guide: this shows where a mark
+    // goes, it does not make the mark. Nothing is drawn while their hands are
+    // empty, because during a duet the sheet is theirs to paint on freely.
+    const part = duet ? studio.myPart() : null
+    if (part?.guides) {
       ctx.save()
       ctx.lineJoin = 'round'
       ctx.lineCap = 'round'
-      for (let i = duet!.traced; i < step.guides.length; i++) {
+      for (let i = duet!.traced; i < part.guides.length; i++) {
         const upNext = i === duet!.traced
         ctx.strokeStyle = ink.accent
         ctx.globalAlpha = upNext ? 0.75 : 0.24
         ctx.lineWidth = upNext ? 2 : 1.4
         ctx.setLineDash(upNext ? [10, 7] : [4, 7])
         ctx.lineDashOffset = upNext ? -(performance.now() / 60) % 17 : 0
-        for (const run of sampleSubpaths(step.guides[i], 8)) {
+        for (const run of sampleSubpaths(part.guides[i], 8)) {
           if (run.length < 2) continue
           ctx.beginPath()
           ctx.moveTo(run[0].x, run[0].y)
@@ -567,10 +580,7 @@ export function Sheet() {
   // The guide's dashes crawl, so a line waiting to be traced reads as an
   // instruction rather than as part of the painting.
   useEffect(() => {
-    const step = duet && duet.index < duet.score.steps.length
-      ? duet.score.steps[duet.index]
-      : null
-    if (step?.by !== 'human') return
+    if (!duet || !studio.myPart()?.guides) return
     let raf = 0
     const step2 = () => {
       drawUi()

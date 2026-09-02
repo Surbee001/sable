@@ -1,6 +1,6 @@
 import { boundsOf, sampleSubpaths, translatePath } from './geometry'
 import { wetField } from './wetfield'
-import { KAWA, type DuetScore, type DuetStep } from './duet'
+import { KAWA, type DuetPart, type DuetScore } from './duet'
 import { presence } from './presence'
 import {
   BRUSHES,
@@ -62,18 +62,40 @@ export interface UiState {
   showAuthorship: boolean
   /** Strokes the agent touched most recently, for the flash-on-change effect. */
   recentAgent: string[]
+  /**
+   * How many marks of the painting to show, in the order they were made.
+   *
+   * Null means all of them, which is every state except a replay. The painting
+   * is a list of decisions in the order they were taken, so playing it back is
+   * a slice rather than a recording: nothing has to be captured while the work
+   * happens, and a document that arrives from a link replays exactly as well as
+   * one painted in the room.
+   */
+  replay: number | null
 }
 
 /* ------------------------------------------------------------------ *
  * Store
  * ------------------------------------------------------------------ */
 
-/** Where a duet has got to. */
+/**
+ * Where a duet has got to.
+ *
+ * No index, because there is no queue. The state of a shared board is only ever
+ * three things: what is finished, what somebody has their hand on, and who that
+ * somebody is. Everything else is free, and either painter may take it.
+ */
 export interface DuetState {
   score: DuetScore
-  /** Which pass is being painted. Equal to steps.length when it is finished. */
-  index: number
-  /** How many of the current pass's guides the human has traced. */
+  /** Bumped every time a score is opened, so a restart of the same one is a new board. */
+  run: number
+  /** Part id to the painter currently holding it. */
+  held: Record<string, Author>
+  /** Part ids that are finished. */
+  done: string[]
+  /** The part the human has in hand, if any. Drives the guides and the brush. */
+  mine: string | null
+  /** How many of that part's guides they have traced. */
   traced: number
 }
 
@@ -169,9 +191,11 @@ class Studio {
     },
     showAuthorship: false,
     recentAgent: [],
+    replay: null,
   }
   private activity: Activity[] = []
   private duet: DuetState | null = null
+  private duetRun = 0
   private past: Scene[] = []
   private future: Scene[] = []
   private listeners = new Set<() => void>()
@@ -596,9 +620,44 @@ class Studio {
 
   getDuet = (): DuetState | null => this.duet
 
-  currentStep(): DuetStep | null {
+  findPart(id: string): DuetPart | null {
     if (!this.duet) return null
-    return this.duet.score.steps[this.duet.index] ?? null
+    const q = id.trim().toLowerCase()
+    return (
+      this.duet.score.parts.find((p) => p.id === q) ??
+      this.duet.score.parts.find((p) => p.title.toLowerCase() === q) ??
+      null
+    )
+  }
+
+  /** The part the human has in hand, which is what the guides are drawn from. */
+  myPart(): DuetPart | null {
+    if (!this.duet?.mine) return null
+    return this.findPart(this.duet.mine)
+  }
+
+  /** What is standing in front of a part, in the sense of unfinished groundwork. */
+  blockedBy(part: DuetPart): DuetPart[] {
+    if (!this.duet || !part.after) return []
+    const done = new Set(this.duet.done)
+    return part.after
+      .filter((id) => !done.has(id))
+      .map((id) => this.findPart(id))
+      .filter((p): p is DuetPart => p !== null)
+  }
+
+  /**
+   * Parts nobody is holding and nobody has finished.
+   *
+   * `by` never filters this. A part suggested for one painter is still open to
+   * the other, and a duet where the software decides who is allowed to paint
+   * what is the thing this stopped being.
+   */
+  freeParts(): DuetPart[] {
+    if (!this.duet) return []
+    const duet = this.duet
+    const done = new Set(duet.done)
+    return duet.score.parts.filter((p) => !done.has(p.id) && !duet.held[p.id])
   }
 
   startDuet(score: DuetScore = KAWA): void {
@@ -614,9 +673,9 @@ class Studio {
       strokes: [],
     }
     this.ui = { ...this.ui, selection: [], mode: 'paint' }
-    this.duet = { score, index: 0, traced: 0 }
+    this.duetRun += 1
+    this.duet = { score, run: this.duetRun, held: {}, done: [], mine: null, traced: 0 }
     this.log('human', 'note', `Started ${score.title}`)
-    this.applyLoadout()
     this.emit()
   }
 
@@ -626,21 +685,81 @@ class Studio {
     this.emit()
   }
 
-  /** Finish the current pass and move to the next. */
-  advanceDuet(): DuetStep | null {
-    if (!this.duet) return null
-    const next = Math.min(this.duet.index + 1, this.duet.score.steps.length)
-    this.duet = { ...this.duet, index: next, traced: 0 }
-    this.applyLoadout()
+  /**
+   * Put a hand on a part.
+   *
+   * The only coordination in the whole score. It fails on a part somebody else
+   * is already holding, and on nothing else: dependencies advise, they do not
+   * refuse, because a painter who wants to draw the branches before the trunk
+   * is making a choice rather than a mistake.
+   */
+  takePart(id: string, author: Author): { ok: boolean; part: DuetPart | null; why: string } {
+    const part = this.findPart(id)
+    if (!this.duet || !part) return { ok: false, part: null, why: `There is no part called "${id}".` }
+    if (this.duet.done.includes(part.id)) {
+      return { ok: false, part, why: `"${part.title}" is already painted.` }
+    }
+    const holder = this.duet.held[part.id]
+    if (holder && holder !== author) {
+      return { ok: false, part, why: `The ${holder} has "${part.title}" in hand. Take another one.` }
+    }
+
+    this.duet = {
+      ...this.duet,
+      held: { ...this.duet.held, [part.id]: author },
+      mine: author === 'human' ? part.id : this.duet.mine,
+      traced: author === 'human' ? 0 : this.duet.traced,
+    }
+    if (author === 'human') this.applyLoadout(part)
+    this.log(author, 'note', `Took ${part.title.toLowerCase()}`)
     this.emit()
-    return this.currentStep()
+    return { ok: true, part, why: '' }
   }
 
-  /** Load the human's brush for the pass they are about to paint. */
-  private applyLoadout(): void {
-    const step = this.currentStep()
-    if (!step || step.by !== 'human' || !step.loadout) return
-    const { layer, ...brush } = step.loadout
+  /** Let go of a part without finishing it, so the other painter can have it. */
+  releasePart(id: string, author: Author): boolean {
+    const part = this.findPart(id)
+    if (!this.duet || !part || this.duet.held[part.id] !== author) return false
+    const held = { ...this.duet.held }
+    delete held[part.id]
+    this.duet = {
+      ...this.duet,
+      held,
+      mine: this.duet.mine === part.id ? null : this.duet.mine,
+      traced: this.duet.mine === part.id ? 0 : this.duet.traced,
+    }
+    this.log(author, 'note', `Put ${part.title.toLowerCase()} back`)
+    this.emit()
+    return true
+  }
+
+  /** Call a part painted. Both painters use this and it is not reversible. */
+  finishPart(id: string, author: Author): DuetPart | null {
+    const part = this.findPart(id)
+    if (!this.duet || !part || this.duet.done.includes(part.id)) return null
+    const held = { ...this.duet.held }
+    delete held[part.id]
+    this.duet = {
+      ...this.duet,
+      held,
+      done: [...this.duet.done, part.id],
+      mine: this.duet.mine === part.id ? null : this.duet.mine,
+      traced: this.duet.mine === part.id ? 0 : this.duet.traced,
+    }
+    this.log(author, 'note', `Finished ${part.title.toLowerCase()}`)
+    this.emit()
+    return part
+  }
+
+  /** True once every part is off the board. */
+  duetFinished(): boolean {
+    return !!this.duet && this.duet.done.length >= this.duet.score.parts.length
+  }
+
+  /** Load the human's brush for the part they have just picked up. */
+  private applyLoadout(part: DuetPart): void {
+    if (!part.loadout) return
+    const { layer, ...brush } = part.loadout
     const target = this.resolveLayer(layer)
     this.ui = {
       ...this.ui,
@@ -652,32 +771,75 @@ class Studio {
   /**
    * One traced guide per stroke. The mark itself is whatever the human actually
    * drew, not the guide: this is their hand in the painting, not a stencil.
+   *
+   * Only counts while they are holding something. Painting on a duet sheet
+   * without having taken a part is ordinary painting, and it stays allowed.
    */
   private tallyDuet(): void {
-    const step = this.currentStep()
-    if (!this.duet || !step || step.by !== 'human') return
-    const needed = step.guides?.length ?? 1
+    const part = this.myPart()
+    if (!this.duet || !part) return
+    const needed = part.guides?.length ?? 0
     const traced = this.duet.traced + 1
-    if (traced >= needed) {
-      this.duet = { ...this.duet, index: this.duet.index + 1, traced: 0 }
-      this.applyLoadout()
+    if (needed > 0 && traced >= needed) {
+      this.finishPart(part.id, 'human')
     } else {
       this.duet = { ...this.duet, traced }
     }
   }
 
-  /** Paint the reference version of an agent pass, when nobody is connected. */
-  playAgentStep(): DuetStep | null {
-    const step = this.currentStep()
-    if (!step || step.by !== 'agent' || !step.reference) return null
-    this.paintMany(step.reference, 'agent', step.title.toLowerCase())
-    this.advanceDuet()
-    return step
+  /** Paint the reference version of a part, when nobody is connected to paint it. */
+  playPart(id: string): DuetPart | null {
+    const part = this.findPart(id)
+    if (!part || !part.reference || !this.duet) return null
+    if (this.duet.done.includes(part.id)) return null
+    this.paintMany(part.reference, 'agent', part.title.toLowerCase())
+    this.finishPart(part.id, 'agent')
+    return part
   }
 
   /** A line from the agent addressed to the human, with no mark attached. */
   noteFromAgent(note: string): void {
     this.log('agent', 'note', note)
+    this.emit()
+  }
+
+  /* -------------------- replay -------------------- */
+
+  /** Marks in the order they were laid down, across every layer. */
+  chronological(): Stroke[] {
+    return [...this.scene.strokes].sort((a, b) => a.createdAt - b.createdAt)
+  }
+
+  setReplay(upTo: number | null): void {
+    if (this.ui.replay === upTo) return
+    this.ui = { ...this.ui, replay: upTo }
+    this.emit()
+  }
+
+  /* -------------------- loading a whole document -------------------- */
+
+  /**
+   * Replace the sheet with one that arrived from somewhere else.
+   *
+   * A restored session, a shared link, or an agent handing over a document it
+   * built. Undoable like anything else, because a link that silently destroys
+   * what you were painting is a worse thing than a link that does not work.
+   */
+  loadScene(scene: Scene, author: Author, summary = 'Opened a painting'): void {
+    this.checkpoint()
+    this.scene = {
+      title: scene.title || 'Untitled study',
+      paper: scene.paper,
+      layers: scene.layers.length ? scene.layers : blankScene().layers,
+      strokes: scene.strokes,
+    }
+    this.ui = { ...this.ui, selection: [], replay: null }
+    this.duet = null
+    wetField.reset()
+    // Anything the agent was in the middle of revealing belongs to the sheet
+    // that just went away, so let it land rather than animating it over this one.
+    presence.flush()
+    this.log(author, 'note', summary, [])
     this.emit()
   }
 

@@ -22,6 +22,7 @@ const GROUPS: Array<{
     tools: [
       'assess_painting',
       'look_at_canvas',
+      'squint',
       'inspect_region',
       'read_painting',
       'find_strokes',
@@ -55,13 +56,21 @@ const GROUPS: Array<{
       'select_strokes',
       'manage_layers',
       'set_sheet',
+      'share_painting',
+      'open_painting',
     ],
   },
   {
     id: 'state',
     label: 'Only right now',
     Icon: Lightning,
-    tools: ['duet_status', 'duet_complete_turn'],
+    tools: [
+      'duet_start',
+      'duet_status',
+      'duet_take_part',
+      'duet_finish_part',
+      'duet_release_part',
+    ],
   },
 ]
 
@@ -69,8 +78,11 @@ const GROUPS: Array<{
 const CONTEXTUAL = new Set([
   'describe_selection',
   'revise_selection',
+  'duet_start',
   'duet_status',
-  'duet_complete_turn',
+  'duet_take_part',
+  'duet_finish_part',
+  'duet_release_part',
 ])
 
 const EMPTY: SurfaceStatus = {
