@@ -31,6 +31,33 @@ It also gives the agent numbers that mean something. `water: 0.9` isn't a style
 token. It decides how far pigment creeps into the paper and whether the edge
 blooms.
 
+## Let me be honest about the pictures
+
+They are not good. A fox that could just as easily be a marmot. Poppies a child
+would beat. A landscape that holds together mostly because watercolour forgives
+everything. I am not going to pretend otherwise, and you should look at them
+knowing that.
+
+But look at *what they are*. Nobody prompted them. There is no diffusion model
+anywhere in this project, and no image model of any kind. Every mark in every one
+of those pictures was placed by an agent choosing a path, a pigment, a water
+level and a brush, then looking at what the water actually did with them and
+deciding what to do next. Each painting is a list of about twenty decisions, and
+you can open any one of them and change it.
+
+That is a genuinely different mechanism from generating an image, and right now
+it is much worse at it. It is also version one of something I have not seen
+anyone try properly: generative AI that **draws** rather than generates. The
+picture is not the output of the model. The picture is a document the model and
+I are both editing.
+
+Prompted image generation started out worse than this and got where it is
+because enough people agreed it was worth pushing on. I think this is worth
+pushing on for a different reason: I want a picture I can reach into and argue
+with, and a bitmap has never once let me do that.
+
+So treat these as the first plates from an experiment, not as a portfolio.
+
 ## What it does
 
 Twenty-three tools on `document.modelContext`, and no prompt box anywhere.
@@ -126,3 +153,9 @@ And build for the bridge failing, because it will. The fallback isn't a worse
 version of your product. It's the accessibility tree, and it can carry a
 three-line recipe for calling every one of your tools through evaluated
 JavaScript. An agent that just read your DOM has already read that too.
+
+The last one is the reason I built the whole thing. Watching an agent lay a wash,
+look at where the water actually took it, and then put the next mark somewhere it
+had not planned is a completely different feeling from watching an image appear.
+It is slower, it is clumsier, and the results are worse. It is also the first
+time it has felt like working *with* one rather than *ordering from* one.
