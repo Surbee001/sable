@@ -31,7 +31,7 @@ export const WET = 0.55
 export type Author = 'human' | 'agent'
 
 /** Brush geometry. Each kind has a different width profile along the stroke. */
-export type BrushKind = 'round' | 'flat' | 'liner' | 'mop' | 'dry'
+export type BrushKind = 'round' | 'flat' | 'liner' | 'mop'
 
 export interface BrushSpec {
   kind: BrushKind
@@ -77,14 +77,6 @@ export const BRUSHES: Record<BrushKind, BrushSpec> = {
     taper: 0.3,
     chatter: 0.1,
     hint: 'Big soft squirrel mop. Loose atmospheric washes and skies.',
-  },
-  dry: {
-    kind: 'dry',
-    label: 'Dry brush',
-    baseWidth: 34,
-    taper: 0.5,
-    chatter: 0.85,
-    hint: 'Barely-loaded brush. Broken, scratchy texture, for bark, rock and sparkle on water.',
   },
 }
 

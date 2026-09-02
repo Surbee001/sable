@@ -1,5 +1,5 @@
 import { studio } from './store'
-import type { Scene, Stroke } from './types'
+import { BRUSHES, type Scene, type Stroke } from './types'
 
 /**
  * Keeping the painting, and handing it to somebody else.
@@ -74,7 +74,13 @@ function clean(raw: unknown): Scene | null {
       const stroke: Stroke = {
         id: typeof st.id === 'string' ? st.id : `stroke_in${i}`,
         layerId: known.has(st.layerId as string) ? (st.layerId as string) : layers[0].id,
-        kind: (typeof st.kind === 'string' ? st.kind : 'round') as Stroke['kind'],
+        // A brush this studio no longer has falls back rather than reaching the
+        // renderer as undefined. Sable dropped the dry brush, and a link written
+        // before that is still a painting.
+        kind:
+          typeof st.kind === 'string' && st.kind in BRUSHES
+            ? (st.kind as Stroke['kind'])
+            : 'round',
         path: st.path,
         pigment: st.pigment,
         water: num(st.water, 0.5),

@@ -53,13 +53,23 @@ libraries, no pre-baked brush textures.
   pigment with it, leaving the rim darker than the pool.
 - **Granulation.** Heavy pigments settle into the paper tooth and mottle.
   Staining pigments do not. Both scale with how much pigment is in suspension.
-- **Blooms**, **dry brush**, and **pigment separation**, so a wash is never
-  exactly one hue.
+- **Blooms** and **pigment separation**, so a wash is never exactly one hue.
 - **Wetting in.** A mark arrives pale and tight, creeps outward, deepens, and
   pulls its rim last. You watch every stroke do it, whoever made it.
 
 Paper is not decorative either: tooth depth changes how strongly pigments
 mottle, and painting onto a wet layer makes the mark bleed.
+
+**Texture is scaled to the mark, not to the pigment alone.** Granulation and
+pooling fill whatever shape they are clipped to, so for a long time the two
+painters were getting visibly different materials on one sheet: a hand paints
+small marks and sees a fragment of the tile in each, which reads as tooth, while
+an agent paints big flooded shapes and got the whole tile several times over
+across a third of the sheet, which reads as static. Neither number was wrong.
+Scale was doing the damage, and only one of the two painters ever works at the
+scale where it shows. The texture is now pulled back as a mark grows, which is a
+statement about looking rather than about pigment, and belongs in the renderer
+for the same reason the drying rim does.
 
 ## The WebMCP surface
 

@@ -18,7 +18,6 @@ function BrushGlyph({ kind }: { kind: BrushKind }) {
         stroke="currentColor"
         strokeWidth={Math.max(1, spec.baseWidth / 8)}
         strokeLinecap={kind === 'flat' ? 'butt' : 'round'}
-        strokeDasharray={kind === 'dry' ? '2.5 2' : undefined}
         opacity={kind === 'mop' ? 0.55 : 1}
       />
     </svg>

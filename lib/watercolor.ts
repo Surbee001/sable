@@ -71,12 +71,21 @@ const TUNING = {
   roughWet: 0.4,
   /** How far the wettest stamps creep past the brush footprint. */
   spread: 0.26,
-  /** Each stamp drifts a little; this is what stops interiors reading flat. */
+  /**
+   * Each stamp drifts a little; this is what stops interiors reading flat.
+   *
+   * Not one of the noise knobs, whatever it looks like in the list. Drift makes
+   * broad, soft variation by scattering where the layers of one mark land; the
+   * grain knobs make texture by laying a tile over the finished shape. Turning
+   * this down to quieten a wash does the opposite: the stamps stop smearing into
+   * each other, their deformed edges line up, and a large flooded shape gains
+   * visible contour rings where it used to be cloudy.
+   */
   drift: 4.5,
   /** Strength of the dark rim left by a drying wash. */
   edgeDarken: 1.5,
   /** Pigment settling into the paper tooth. */
-  granulation: 0.9,
+  granulation: 0.62,
   /** Water pushing dried pigment outward into a cauliflower. */
   bloom: 0.85,
   /**
@@ -90,7 +99,7 @@ const TUNING = {
    * the mark rather than the sheet, so a petal and a sky both get a handful of
    * pools across them instead of the petal getting a fragment of one.
    */
-  pooling: 0.42,
+  pooling: 0.32,
   /** Roughly how many pools across the longest edge of a mark. */
   poolsAcross: 2.6,
   /**
@@ -111,7 +120,7 @@ const TUNING = {
    * every wash is exactly one hue, which is the flattest possible tell that
    * something was computed rather than mixed.
    */
-  separation: 16,
+  separation: 11,
   /**
    * Size of one granulation tile in sheet units.
    *
@@ -286,6 +295,31 @@ function getPaperTile(): HTMLCanvasElement {
 }
 
 /**
+ * How much of the paper's texture a mark of this size is allowed to show.
+ *
+ * The two painters were getting visibly different materials on one sheet, and
+ * this is why. Granulation and pooling are area effects: they fill whatever
+ * shape they are clipped to, at full strength, however big it is. A hand paints
+ * small marks and sees a fragment of a tile in each, which reads as tooth. An
+ * agent paints big flooded shapes and gets the whole tile, several times over,
+ * across a third of the sheet, which reads as static. Nothing was wrong with
+ * either number; scale itself was doing the damage, and only one of the two
+ * painters ever works at the scale where it shows.
+ *
+ * A real wash does granulate all the way across. It does not shout about it at
+ * arm's length, because the eye reads a large mottled area as one surface and a
+ * small one as detail. So the texture is pulled back as the mark grows, which is
+ * a statement about looking rather than about pigment, and belongs in the
+ * renderer for the same reason the drying rim does.
+ *
+ * `r` is the mark's half-span in sheet units. Marks up to about a fifth of the
+ * sheet are untouched; a full-sheet wash keeps something over a third.
+ */
+function textureAtScale(r: number): number {
+  return 1 / (1 + Math.max(0, r - 110) / 420)
+}
+
+/**
  * Coarse, high-contrast clumping for granulation.
  *
  * Granulating pigments such as ultramarine, cerulean and burnt sienna are made of
@@ -360,7 +394,7 @@ export function renderPaper(
   const pattern = scaledPattern(ctx, getPaperTile(), TUNING.paperSpan)
   if (pattern) {
     ctx.globalCompositeOperation = 'multiply'
-    ctx.globalAlpha = 0.1 + spec.grain * 0.16
+    ctx.globalAlpha = 0.075 + spec.grain * 0.11
     ctx.fillStyle = pattern
     ctx.fillRect(0, 0, w, h)
   }
@@ -892,8 +926,12 @@ export function renderStroke(
       bctx.clip(rule)
       bctx.globalCompositeOperation = 'multiply'
       bctx.globalAlpha = Math.min(
-        0.9,
-        TUNING.pooling * (0.35 + water * 0.65) * (0.4 + load * 0.6) * settle,
+        0.5,
+        TUNING.pooling *
+          (0.35 + water * 0.65) *
+          (0.4 + load * 0.6) *
+          settle *
+          textureAtScale(Math.max(b.w, b.h) / 2),
       )
       bctx.fillStyle = pattern
       bctx.fillRect(b.x - 4, b.y - 4, b.w + 8, b.h + 8)
@@ -940,14 +978,17 @@ export function renderStroke(
       grainRng() * TUNING.grainSpan, grainRng() * TUNING.grainSpan,
     )
     if (pattern) {
+      const b = boundsOf(widest.flat(), 6)
       bctx.save()
       bctx.beginPath()
       for (const poly of widest) addPolygon(bctx, poly)
       bctx.clip(rule)
       bctx.globalCompositeOperation = 'multiply'
-      bctx.globalAlpha = Math.min(0.85, gran * (0.45 + water * 0.55))
+      bctx.globalAlpha = Math.min(
+        0.5,
+        gran * (0.45 + water * 0.55) * textureAtScale(Math.max(b.w, b.h) / 2),
+      )
       bctx.fillStyle = pattern
-      const b = boundsOf(widest.flat(), 6)
       bctx.fillRect(b.x, b.y, b.w, b.h)
       bctx.restore()
     }
@@ -1118,11 +1159,6 @@ export function renderStroke(
     )
   }
 
-  // A dry brush skips across the tooth instead of flooding it.
-  if (stroke.kind === 'dry') {
-    for (const run of runs) applySkip(bctx, run, halfWidth, stroke.seed)
-  }
-
   bctx.restore()
 
   // One composite onto the sheet. Multiply, because watercolour is subtractive:
@@ -1232,61 +1268,6 @@ function applyBloom(
 }
 
 
-
-/**
- * Break the stroke up along its own direction so a dry brush reads as a brush
- * skipping over the tooth rather than as scattered noise.
- */
-function applySkip(
-  bctx: CanvasRenderingContext2D,
-  centre: Point[],
-  halfWidth: number,
-  seed: number,
-): void {
-  const rng = makeRng(seed ^ 0x5eed)
-  bctx.save()
-  bctx.globalCompositeOperation = 'destination-out'
-  bctx.lineCap = 'butt'
-
-  // Fine channels parallel to the travel of the brush, standing in for the gaps between the
-  // hairs. Many thin lanes read as tooth; a few fat ones read as worms.
-  const lanes = Math.max(6, Math.round(halfWidth / 1.1))
-  const laneWidth = (halfWidth * 2) / lanes
-  for (let lane = 0; lane < lanes; lane++) {
-    if (rng() < 0.52) continue
-    const offset = ((lane + 0.5) / lanes - 0.5) * 2 * halfWidth
-    bctx.lineWidth = laneWidth * (0.35 + rng() * 0.5)
-    bctx.globalAlpha = 0.2 + rng() * 0.5
-    bctx.beginPath()
-    let drawing = false
-    for (let i = 0; i < centre.length; i++) {
-      const prev = centre[Math.max(0, i - 1)]
-      const next = centre[Math.min(centre.length - 1, i + 1)]
-      let dx = next.x - prev.x
-      let dy = next.y - prev.y
-      const len = Math.hypot(dx, dy) || 1
-      dx /= len
-      dy /= len
-      // Taper the lanes in from the ends so the stroke keeps its silhouette.
-      const t = centre.length > 1 ? i / (centre.length - 1) : 0
-      const inset = Math.min(1, Math.sin(Math.PI * t) * 2.2)
-      const x = centre[i].x - dy * offset * inset
-      const y = centre[i].y + dx * offset * inset
-      if (rng() < 0.3) {
-        drawing = false
-        continue
-      }
-      if (!drawing) {
-        bctx.moveTo(x, y)
-        drawing = true
-      } else {
-        bctx.lineTo(x, y)
-      }
-    }
-    bctx.stroke()
-  }
-  bctx.restore()
-}
 
 /** Convert pigment properties plus stroke settings into ink colour and alpha. */
 function pigmentInk(

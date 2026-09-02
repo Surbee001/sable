@@ -79,7 +79,7 @@ export function Inspector() {
               onClick={() => studio.updateMany(ids, { kind }, 'human')}
               className={`seg-item${!many && first.kind === kind ? ' seg-item--on' : ''}`}
             >
-              {kind === 'dry' ? 'Dry' : BRUSHES[kind].label}
+              {BRUSHES[kind].label}
             </button>
           ))}
         </div>
