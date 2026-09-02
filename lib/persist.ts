@@ -218,7 +218,10 @@ export function forgetLocal(): void {
 export function startAutosave(): () => void {
   let timer: ReturnType<typeof setTimeout> | null = null
   const write = () => {
-    timer = null
+    if (timer) {
+      clearTimeout(timer)
+      timer = null
+    }
     try {
       const scene = studio.getScene()
       const duet = studio.getDuet()
@@ -244,8 +247,26 @@ export function startAutosave(): () => void {
     if (timer) clearTimeout(timer)
     timer = setTimeout(write, SAVE_DEBOUNCE_MS)
   })
+
+  /**
+   * Write immediately when the page is going away.
+   *
+   * The debounce exists so a stroke does not stringify the document five times
+   * while it settles, and it means there is always up to a second of work that
+   * has not been written down. That is fine when a person closes a tab and not
+   * fine at all when an agent's client reloads the page to recover from a
+   * dropped connection, which is exactly when the last second matters most.
+   * `pagehide` fires for both, including the cases `beforeunload` misses.
+   */
+  const flush = () => write()
+  window.addEventListener('pagehide', flush)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flush()
+  })
+
   return () => {
     if (timer) clearTimeout(timer)
+    window.removeEventListener('pagehide', flush)
     unsubscribe()
   }
 }

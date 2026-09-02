@@ -20,16 +20,18 @@ shadow where its legs *actually* ended, which is not where the score assumed.
 Say this out loud while you type it. It is written to be spoken.
 
 > Sable's open in front of me and you should have its tools. Start the fox, and
-> take the whole animal yourself: the body, the head, the ears, the tail and the
-> white tip, the chest, the legs, the eye and the nose, the whiskers. A few of
-> those are marked as mine. Take them anyway, that's what I'm asking for. I'll
-> do the world around it, so leave me the ground, the shadow and the weeds. Tell
-> me what you've taken as you go, and look at the sheet between passes.
+> paint the whole animal: the body, the head, the ears, the tail and the white
+> tip, the chest, the legs, the eye and the nose, the whiskers. A few of those
+> are marked as mine. Take them anyway, that's what I'm asking for. Take one or
+> two at a time and paint them before you take any more, rather than claiming
+> the lot up front. I'll do the world around it, so leave me the ground, the
+> shadow and the weeds. Tell me what you've taken as you go.
 
 If you want a shorter opener:
 
 > Sable's open here and its tools should be in your list. Start the fox and
-> paint the whole animal. Leave me the ground, the shadow and the weeds.
+> paint the whole animal, a part or two at a time. Leave me the ground, the
+> shadow and the weeds.
 
 Follow-up once its marks are down, with one of them selected:
 
@@ -128,3 +130,6 @@ that one**. Everything else is optional. Lose the replay last.
   better than narration.
 - If it only takes some of the animal, just say "take the rest of it too" rather
   than re-explaining. That exchange is more convincing than a clean first try.
+- Ask it to work a part or two at a time. It is better television than a silent
+  minute of claiming, the human can see what it intends, and it keeps the tool
+  descriptions short, which is what a browser is actually willing to hold.

@@ -52,124 +52,101 @@ function fail(text: string): ToolResult {
 const BRUSH_NAMES = Object.keys(BRUSHES) as BrushKind[]
 const PAPER_NAMES = Object.keys(PAPERS) as PaperKind[]
 
+/**
+ * The shape of a mark, said as briefly as it can be said.
+ *
+ * These descriptions used to be essays. They were good essays and they cost the
+ * page its connection: a browser refused the whole surface with "the site's
+ * WebMCP configuration exceeds supported limits", and `paint` alone was twelve
+ * kilobytes of it. A manifest is not documentation. It is a thing every client
+ * has to hold in memory at once, and the long form belongs in `how_to_paint`,
+ * which an agent calls when it wants it and skips when it does not.
+ */
 const STROKE_PROPS = {
   path: {
     type: 'string',
     description:
-      'SVG path data in sheet coordinates, e.g. "M 420 300 C 470 210 560 210 610 300 Z". ' +
-      'The full SVG grammar works: M L H V C S Q T A Z, absolute or relative.',
+      'SVG path data in sheet units, e.g. "M 420 300 C 470 210 560 210 610 300 Z". ' +
+      'Full grammar: M L H V C S Q T A Z.',
   },
   fill: {
     type: 'boolean',
     description:
-      'false (default) treats the path as a centreline the brush travels along. ' +
-      'true treats it as a closed region flooded with a wash. Petals and leaves are fills; stems are not.',
+      'false (default): the path is a centreline the brush travels. true: a closed region ' +
+      'flooded with a wash. Petals and skies are fills; stems are not.',
   },
   brush: {
     type: 'string',
     enum: BRUSH_NAMES,
-    description: BRUSH_NAMES.map((k) => `${k}: ${BRUSHES[k].hint}`).join(' '),
+    description: BRUSH_NAMES.join(', ') + '. See list_palette.',
   },
   pigment: {
     type: 'string',
-    description:
-      'Pigment id or name, e.g. "ultramarine", "Quinacridone Rose", "burnt-sienna". ' +
-      'Call list_palette for the full set and their behaviour.',
+    description: 'Pigment id or name. See list_palette.',
   },
   water: {
     type: 'number',
     minimum: 0,
     maximum: 1,
-    description:
-      'How wet the brush is. 0.15 holds a crisp edge; 0.5 is a normal wash; ' +
-      '0.85 floods, spreads well past the path and dries with almost no edge.',
+    description: '0.15 crisp edge, 0.5 normal wash, 0.85 floods and spreads well past the path.',
   },
   pressure: {
     type: 'number',
     minimum: 0,
     maximum: 1,
-    description: 'Brush pressure, scales the width of the mark. Default 0.7.',
+    description: 'Scales the width of the mark. Default 0.7.',
   },
   opacity: {
     type: 'number',
     minimum: 0,
     maximum: 1,
-    description:
-      'Pigment load. 0.2 is a pale tint, 1.0 is full strength straight from the pan. ' +
-      'Watercolour builds up, so start lower than you think.',
+    description: 'Pigment load. 0.2 a pale tint, 1.0 full strength. Start low; it builds.',
   },
   layer: {
     type: 'string',
-    description:
-      'Layer name or id to paint on. Lower layers sit underneath. Omit to use the layer the human has active.',
+    description: 'Layer name or id. Omit for the human\'s active layer.',
   },
   width: {
     type: 'number',
-    description:
-      'Width of the mark in sheet units, overriding the brush size. A liner is about 7 and a mop ' +
-      'about 92, so this is the whole range between them and past both ends. Ignored on a fill.',
+    description: 'Mark width in sheet units, overriding the brush. Roughly 3 to 200. Ignored on a fill.',
   },
   lift: {
     type: 'boolean',
     description:
-      'Take pigment off instead of putting it on. The mark is made exactly as any other is, with ' +
-      'the same soft edge and the same spread, but it pulls the passage back toward bare paper ' +
-      'and can never darken anything. This is how mist is made, how a cloud gets its light side, ' +
-      'and how a highlight is recovered from a wash that has closed over it. Nothing else in this ' +
-      'studio can make a passage lighter.',
+      'Take pigment off instead of putting it on, with the same soft edge. The only way to ' +
+      'lighten anything: mist, the lit side of a cloud, a highlight out of a closed wash.',
   },
   grade: {
     type: 'object',
-    description:
-      'Make the wash different at one end from the other. One flat colour across a large area is ' +
-      'the clearest sign a wash was computed rather than poured, and a sky is never one colour. ' +
-      'Use it on anything big.',
+    description: 'Make the wash different at one end from the other. Use it on anything big.',
     properties: {
-      angle: {
-        type: 'number',
-        description: 'Which way the change runs, in degrees. 0 points right, 90 points down. Default 90.',
-      },
-      pigment: {
-        type: 'string',
-        description:
-          'A second pigment to run toward, so the wash is variegated rather than merely graded. ' +
-          'Omit to fade the first pigment instead.',
-      },
-      fade: {
-        type: 'number',
-        minimum: 0,
-        maximum: 1,
-        description: 'How much weaker the far end is. 0 keeps full strength, 1 fades to nothing.',
-      },
+      angle: { type: 'number', description: 'Degrees. 0 right, 90 down. Default 90.' },
+      pigment: { type: 'string', description: 'A second pigment to run toward. Omit to fade instead.' },
+      fade: { type: 'number', minimum: 0, maximum: 1, description: '0 keeps strength, 1 fades to nothing.' },
     },
   },
   spatter: {
     type: 'object',
     description:
-      'Knock pigment off the brush into this shape instead of drawing with it. The path becomes a ' +
-      'region to spatter into. This is the only granular thing in the studio: shingle, gravel, the ' +
-      'outer leaves of a tree, sparkle on broken water, grit at the front of a landscape. Use it ' +
-      'sparingly and near the viewer, because texture reads as close.',
+      'Knock pigment off the brush into this region instead of drawing with it. Shingle, gravel, ' +
+      'grit at the front. Texture reads as close, so keep it near the viewer.',
     properties: {
-      density: { type: 'number', description: 'Specks per ten thousand square units. 10 is sparse, 40 usual, 150 heavy.' },
-      size: { type: 'number', description: 'Average speck radius in sheet units. Default 3.' },
+      density: { type: 'number', description: 'Specks per ten thousand square units. 10 sparse, 40 usual.' },
+      size: { type: 'number', description: 'Speck radius in sheet units. Default 3.' },
     },
   },
   charge: {
     type: 'array',
     description:
-      'Drop a second colour into this wash while it is still flowing. Not the same as painting ' +
-      'another mark on top: a charged wash is ONE wash, so the colours meet in the water and there ' +
-      'is no boundary anywhere. It is how a sky goes warm in one corner without anything in it ' +
-      'looking like a shape, and how a single wash carries two greens. A second mark, however soft, ' +
-      'always brings its own edge and its own drying rim.',
+      'Drop a second colour into this wash while it flows. One wash, so the colours meet in the ' +
+      'water with no boundary. A second mark always brings its own edge instead.',
     items: {
       type: 'object',
       properties: {
-        pigment: { type: 'string', description: 'The pigment being dropped in.' },
-        x: { type: 'number', description: 'Where, in sheet units. Should be inside the mark.' },
-        y: { type: 'number', description: 'Where, in sheet units.' },
-        spread: { type: 'number', description: 'How far it travels, as a fraction of the mark. Default 0.34.' },
+        pigment: { type: 'string' },
+        x: { type: 'number', description: 'Inside the mark, in sheet units.' },
+        y: { type: 'number' },
+        spread: { type: 'number', description: 'Fraction of the mark. Default 0.34.' },
         strength: { type: 'number', description: '0 to 1. Default 0.7.' },
       },
       required: ['pigment', 'x', 'y'],
@@ -178,16 +155,12 @@ const STROKE_PROPS = {
   softToward: {
     type: 'number',
     description:
-      'Which way this mark\'s soft side faces, in degrees, 0 right and 90 down. Left out, the ' +
-      'seed decides. Worth setting deliberately across a passage: lost and found edges are how a ' +
-      'painting says where the light is, and they only say it when neighbouring shapes agree. ' +
-      'Point the soft sides away from your light source and the crisp ones toward it.',
+      'Which way this mark dissolves, in degrees. Point soft sides away from the light and hold ' +
+      'edges toward it, and agree about it across neighbouring shapes.',
   },
   note: {
     type: 'string',
-    description:
-      'One short line on what this mark is for. It shows in the studio log next to the stroke, ' +
-      'so the human can follow your reasoning. Write it for them, not for yourself.',
+    description: 'One short line on what this mark is for. It shows in the human\'s log.',
   },
 } as const
 
@@ -566,20 +539,10 @@ function coreTools(): ToolDef[] {
     {
       name: 'squint',
       description:
-        'Look at the painting the way a painter checks one: detail thrown away, colour thrown away, ' +
-        'everything collapsed into four flat tones. You get the value structure as an image you can ' +
-        'actually see, plus where the weight of the picture sits, where the eye is going to go, and ' +
-        'how hard the edges really are.\n\n' +
-        'This is not a worse version of look_at_canvas. It answers a different question, and it is the ' +
-        'question that decides whether a painting works. A photograph of the sheet shows you what you ' +
-        'painted, and every mark in it still looks like the thing you meant, which is exactly why the ' +
-        'faults that sink a picture are invisible in one: values all bunched in the middle, no real dark ' +
-        'anywhere, the mass of the thing sitting dead centre. Those only show up once the detail is gone.\n\n' +
-        'If a study holds together as four grey shapes it will hold together finished. If it does not, ' +
-        'no amount of good brushwork will save it, and the fix is always a value, never a detail.\n\n' +
-        'Worth calling after the first two or three passes, and again before you decide you are done. ' +
-        'The edge and focus readings are measured off the actual paint rather than from what you asked ' +
-        'for, so they account for what the water did after it left the brush.',
+        'The sheet as four flat tones, with the detail and the colour thrown away, plus where the ' +
+        'weight sits, where the eye goes and how hard the edges actually came out. A painting ' +
+        'fails on its value structure long before it fails on its drawing, and that is invisible ' +
+        'in an ordinary look at it. Cheap. Call it often.',
       annotations: { readOnlyHint: true },
       inputSchema: {
         type: 'object',
@@ -649,19 +612,10 @@ function coreTools(): ToolDef[] {
     {
       name: 'assess_painting',
       description:
-        'Work out what the picture needs next. Call this before every pass, including your ' +
-        'first, and again after you have painted.\n\n' +
-        'It measures the sheet rather than describing it, and it measures two different things. ' +
-        'From the document: how many pigments are in play, which ninths are untouched, whether the ' +
-        'big shapes are anchored to the edges. From the rendered paint itself: the value structure ' +
-        'in four bands, where the weight of the picture actually sits, where the eye will actually ' +
-        'go, and how hard the edges actually came out once the water had finished with them. It ' +
-        'returns the value study rather than a photograph, because the photograph is the thing that ' +
-        'hides these faults. It also tells you which passages are still wet.\n\n' +
-        'This exists because the failure mode of painting without measuring is always the ' +
-        'same: a new hue for every shape, nothing properly dark, every edge equally soft, and ' +
-        'a picture that goes flat. Those are not lapses of taste, they are lapses of ' +
-        'measurement, and they are all visible in the document.',
+        'What the painting needs next, measured rather than guessed. Two readings: the document ' +
+        'itself (pigments used, which ninths are untouched, whether the big shapes are anchored) ' +
+        'and the rendered paint (value structure, where the weight sits, where the eye goes, how ' +
+        'hard the edges came out). Call it first and after every pass. Returns an image.',
       annotations: { readOnlyHint: true },
       inputSchema: { type: 'object', properties: {} },
       execute: () => {
@@ -699,99 +653,18 @@ function coreTools(): ToolDef[] {
     {
       name: 'paint',
       description:
-        'Paint one or more watercolour marks. This is the main way to put paint on the sheet.\n\n' +
-        `THE SHEET is ${CANVAS_W} wide by ${CANVAS_H} tall, square units, origin top-left.\n\n` +
-        'TWO KINDS OF MARK, and choosing right matters more than anything else here:\n' +
-        '  fill: false (default) treats the path as a centreline the brush travels along. Stems, branches, ' +
-        'contours, calligraphic lines.\n' +
-        '  fill: true treats the path as a closed region flooded with a wash. Petals, leaves, skies, water, ' +
-        'anything with area. A petal is a filled shape, not an outlined one. This is the single most ' +
-        'common mistake: outlining a form instead of flooding it.\n\n' +
-        'FOUR MOVES THAT ARE NOT MORE MARKS. Reach for these before adding another shape:\n' +
-        '  • RESERVE THE LIGHT. A path with a second closed subpath inside it floods the outer ' +
-        'shape and leaves the inner one bare, because the fill rule is even-odd. That is how you ' +
-        'get a moon, a sunlit roof, a white sail: not by painting them, but by painting round ' +
-        'them. Untouched paper is the only true light here and it cannot be put back later.\n' +
-        '  • LIFT. Set lift true and the mark takes pigment off instead of putting it on, with the ' +
-        'same soft edge everything else has. Mist, the light side of a cloud, a highlight pulled ' +
-        'back out of a wash that has already closed. Nothing else in this studio can lighten.\n' +
-        '  • GRADE THE BIG WASHES. A large area of one flat colour is the clearest sign a wash was ' +
-        'computed. Pass grade with an angle, and either a second pigment to run toward or a fade. ' +
-        'A sky is never one colour; neither is a field.\n' +
-        '  • POINT THE SOFT EDGES. softToward says which way a mark dissolves. Decide where the ' +
-        'light is, then let every shape in the passage go soft away from it and hold its edge ' +
-        'toward it. Agreeing about that across several marks is most of what makes a picture read ' +
-        'as lit rather than assembled.\n\n' +
-        'AND SIZE THE BRUSH. width sets the mark in sheet units, from a 3-unit hair to a 200-unit ' +
-        'sweep, rather than picking whichever of the five brushes is least wrong.\n\n' +
-        'THE PAINT ANSWERS BACK, and this is what makes this a medium rather than a drawing ' +
-        'surface. Every paint call returns what the paint did that you did not ask for: how far ' +
-        'past your path it crept, which side of a wash went soft, what ' +
-        'granulated, what fused with what. That is not commentary on the result. It is half of the ' +
-        'picture, and it is the half you have to reply to.\n' +
-        '  • A soft side is not a mistake to paint out. It is a lost edge you now own, and the move ' +
-        'is to build around it.\n' +
-        '  • A lost edge is not a failure to be crisp. It is the soft side of a form, and it starts ' +
-        'working the moment you put one hard edge near it.\n' +
-        '  • A mark that fused with the one beneath it has no boundary any more and never will ' +
-        'again. Plan around that rather than trying to recover it.\n' +
-        'Painting your next intended shape while ignoring that report is specifying outcomes again, ' +
-        'which is the thing this studio exists to be an alternative to.\n\n' +
-        'THE SHEET IS WET IN PLACES, AND IT DRIES ON A CLOCK. Every result tells you which passages ' +
-        'are still open and roughly how many seconds are left in them. Paint into an open passage and ' +
-        'the marks fuse and soften; wait, and the same mark lands with a hard edge instead. This is ' +
-        'the one decision watercolour has that no other medium does, so make it on purpose: if you ' +
-        'want two shapes to become one atmosphere, paint the second NOW, in this pass or the very ' +
-        'next. If you want them to stay separate things, let the paper close first.\n\n' +
-        'HOW THE PAINT BEHAVES, because the renderer really simulates it:\n' +
-        '  • Work light to dark. Layers multiply, so you can always deepen a passage and never lighten one.\n' +
-        '  • Water spreads and softens. Above about 0.65 a wash loses its edge almost entirely.\n' +
-        '  • Granulating pigments (ultramarine, cerulean, burnt sienna) mottle into the paper. ' +
-        'Staining ones (phthalo blue, quinacridone rose) stay smooth and hold a hard edge.\n' +
-        '  • Painting into paper that is still wet bleeds outward and fuses. Both the layer and ' +
-        'anything painted there recently count as wet.\n' +
-        '  • Leave paper white. Untouched sheet is the only true highlight you get.\n\n' +
-        'HOW A PAINTING IS BUILT. Not one call, but four or five, in this order:\n' +
-        '  1. The ground. Two or three enormous, almost colourless washes on the wettest ' +
-        'layer, water above 0.9 and load under 0.2. They set the light for everything after.\n' +
-        '  2. The big shapes. Land, water, the mass of a tree. Still wet, still pale, still ' +
-        'few. Most of the picture should be decided by now.\n' +
-        '  3. The middle. Stronger, smaller, on a drier layer. This is where the subject ' +
-        'actually appears.\n' +
-        '  4. The dark. One small area at load 0.8 or above and water under 0.35. Only one. ' +
-        'It is what makes everything else read as light.\n' +
-        '  5. The marks. A handful of thin lines at most: a mast, a stem, a bird. Stop early.\n\n' +
-        'RUN THE BIG SHAPES OFF THE EDGE OF THE SHEET. A wash for a sky or a field should ' +
-        'start at x -40 and end at 1040, not at 0 and 1000. A large shape that floats with ' +
-        'clear paper all the way round it reads as a sticker; the same shape running off ' +
-        'three edges reads as a place. This is the single most common way a picture built ' +
-        'from good marks still comes out looking assembled.\n\n' +
-        'If you are painting a recognisable thing, call how_to_paint for it first. It gives ' +
-        'the pass sequence and a path to start from for that subject specifically.\n\n' +
-        'AND SQUINT. After two or three passes call squint, which throws away the detail and the ' +
-        'colour and shows you the picture as four flat tones. Every fault that actually sinks a ' +
-        'painting is invisible in a photograph of it and obvious in that. If the value study is one ' +
-        'grey mush, nothing you paint on top of it will help and the answer is a dark.\n\n' +
-        'WHAT SEPARATES A PAINTING FROM A DIAGRAM. Read this before a first pass:\n' +
-        '  • Use three or four pigments for the whole picture, not twelve. Call suggest_palette ' +
-        'and stay inside what it gives you. Nothing makes an image read as generated faster ' +
-        'than every shape being a different hue.\n' +
-        '  • Build a value structure: most of the picture in a middle tone, a little of it very ' +
-        'light (bare paper), and one small area genuinely dark. Without a real dark nothing ' +
-        'else reads as light.\n' +
-        '  • Vary your edges. A form that is soft on the shadow side and crisp where the light ' +
-        'catches it looks three-dimensional; one that is uniformly crisp looks cut out of paper.\n' +
-        '  • Big shapes first, on a wet lower layer, then fewer and smaller marks on top. ' +
-        'Detail everywhere is the same as detail nowhere.\n' +
-        '  • Let shapes overlap and run together. Marks that each sit in their own space read ' +
-        'as clip art; a petal that bleeds into the one behind it reads as paint.\n' +
-        '  • Avoid symmetry and even spacing. Odd numbers, uneven gaps, one element larger ' +
-        'and closer than the rest.\n' +
-        '  • Do not draw a circle for a sun or a rectangle for a sky. A perfect primitive is ' +
-        'the one shape watercolour cannot make. Give every silhouette an uneven contour and ' +
-        'let opposite sides differ.\n\n' +
-        'Pass several strokes at once. A whole passage in one call lands as one undoable action, ' +
-        'and reads to the human as one deliberate move rather than a twitchy stream.',
+        `Paint one or more watercolour marks. The sheet is ${CANVAS_W} by ${CANVAS_H}, origin top-left.\n\n` +
+        'fill: false is a centreline the brush travels. fill: true floods a closed region. A petal ' +
+        'is a filled shape, not an outlined one, and that is the commonest mistake here.\n\n' +
+        'Before adding another shape, reach for: a second closed subpath inside a fill to reserve ' +
+        'bare paper as light; lift to take pigment off; grade on anything big; softToward to point ' +
+        'the soft edges away from your light.\n\n' +
+        'The result tells you what the paint did that you did not ask for, and which passages are ' +
+        'still wet and for how long. Paint into an open one and the marks fuse; wait and they will ' +
+        'not. Reply to that report rather than painting the next shape you had planned.\n\n' +
+        'Work light to dark: layers multiply, so you can deepen a passage and never lighten one. ' +
+        'Call how_to_paint for a worked recipe for a subject, and assess_painting to be told what ' +
+        'the picture needs next.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -876,11 +749,10 @@ function coreTools(): ToolDef[] {
     {
       name: 'revise_stroke',
       description:
-        'Change marks that are already on the sheet, keeping them the same marks. This is the ' +
-        'part a prompt-only image model cannot do: a stroke stays an object, so its pigment, ' +
-        'water, pressure, brush or even its path can be changed afterwards without repainting ' +
-        'anything around it. Changing the colour of something already painted is this tool ' +
-        'with a pigment. Pass one id or many; get ids from find_strokes or read_painting.',
+        'Change marks that are already down, by id, keeping them the same marks. This is the ' +
+        'point of the studio: a wash that went too strong is revised, not painted over. Pass one ' +
+        'id or several to apply the same change to all of them. find_strokes and read_painting ' +
+        'give you ids.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -1130,10 +1002,9 @@ function coreTools(): ToolDef[] {
     {
       name: 'find_strokes',
       description:
-        'Find marks without reading the whole painting. Filter by pigment, author, brush, ' +
-        'whether it is a wash, a word in its note, or a rectangle of the sheet it overlaps. ' +
-        'This is how you get from "the sun" to an id you can act on: the sun is the big ' +
-        'cadmium red wash in the upper right, so filter by pigment and region and you have it.',
+        'Find marks by pigment, author, region or note, without reading the whole painting. Use ' +
+        'it when the human says "the blue one" or "the marks in the corner", and to get ids for ' +
+        'revise_stroke.',
       annotations: { readOnlyHint: true },
       inputSchema: {
         type: 'object',
@@ -1242,10 +1113,9 @@ function coreTools(): ToolDef[] {
     {
       name: 'set_brush',
       description:
-        'Load the brush the human is holding, and set what mode they are in. Use it to hand ' +
-        'them something ready to go: "here, try this" is a loaded mop of dilute cerulean, not ' +
-        'a paragraph telling them which sliders to move. It changes nothing already on the ' +
-        'sheet.',
+        "Load the brush in the human's hand and set their mode. Use it to hand them something: " +
+        'set the pigment and water for the passage you want them to paint, or switch them to ' +
+        'select so they can point at a mark. It changes their tools, not the painting.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -1323,22 +1193,10 @@ function coreTools(): ToolDef[] {
     {
       name: 'how_to_paint',
       description:
-        'How a particular thing is actually built and then painted: the masses it is made of ' +
-        'before any paint, then how many washes, in what order, at what strength, and the mistake ' +
-        'that subject invites.\n\n' +
-        'The first half matters more than the second. A study can have a perfect value structure, ' +
-        'a limited palette, soft mass and crisp accents in the right places, and still come out ' +
-        'as a cartoon, because nothing was wrong with the painting and there was no drawing under ' +
-        'it. Paint cannot rescue a form that was never observed.\n\n' +
-        'Call this before painting any recognisable subject, including ones with no recipe: the ' +
-        'general method comes back instead, and it is most of the answer.\n\n' +
-        'General principles do not survive ' +
-        'a blank sheet: told to keep a limited palette and vary its edges, anyone still paints ' +
-        'a mountain as a triangle and a flower as a fan of even ovals, because the missing ' +
-        'thing is not watercolour in general but how that subject in particular is built. ' +
-        'Each answer is a worked sequence with real numbers and a path to start from, sized to ' +
-        'the whole sheet, so scale and move them to fit what you are making.',
-      annotations: { readOnlyHint: true },
+        'A worked recipe for painting a particular subject: the passes in order, the numbers to ' +
+        'use, and the trap people fall into. Call it before painting something you have not ' +
+        'painted here before. Subjects: ' +
+        SUBJECTS.map((x) => x.id).join(', ') + '.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -1728,20 +1586,18 @@ function contextualTools(): ToolDef[] {
     tools.push({
       name: 'duet_start',
       description:
-        'Open a score and paint one with the human. A score is a board of named parts of a ' +
-        'single picture, laid out in advance with a brief for each. Nobody takes turns: any ' +
-        'free part can be claimed by either of you at any moment, so the two of you have to ' +
-        'agree out loud about who is doing what. Available: ' +
-        SCORES.map((s) => `"${s.id}" (${s.title}, ${s.parts.length} parts, ${s.subtitle})`).join('; ') +
-        '. This tapes down a fresh sheet, so ask before you call it if there is work on the ' +
-        'current one.',
+        'Open a score and paint it with the human: a board of named parts of one picture, each ' +
+        'with a brief. No turns, so any free part can be taken by either of you and you have to ' +
+        'agree out loud about who does what. Scores: ' +
+        SCORES.map((x) => `${x.id} (${x.parts.length} parts)`).join(', ') +
+        '. This tapes down a fresh sheet, so ask first if there is work on the current one.',
       inputSchema: {
         type: 'object',
         properties: {
           score: {
             type: 'string',
             enum: SCORES.map((s) => s.id),
-            description: SCORES.map((s) => `${s.id}: ${s.blurb}`).join(' '),
+            description: SCORES.map((s) => `${s.id}: ${s.subtitle}`).join('. '),
           },
         },
         required: ['score'],
@@ -1782,12 +1638,10 @@ function contextualTools(): ToolDef[] {
     tools.push({
       name: 'duet_status',
       description:
-        `"${duet.score.title}" is open: ${parts.length} parts of one picture, shared with the ` +
-        'human. There are no turns here. This returns the board, which parts are painted, which ' +
-        'the human has in hand, which you have, and which are free, with the brief for each and ' +
-        'an image of the sheet. Call it before you take anything and again after the human has ' +
-        'painted, because your parts sit on marks they made and where they actually put them is ' +
-        'not where the score imagined they would.',
+        `The board for "${duet.score.title}": every part, its brief, and whether it is painted, ` +
+        'held by you, held by the human or free. Plus an image of the sheet. Call it before you ' +
+        'take anything and again after the human paints, because your parts sit on their marks ' +
+        'and those are never quite where the score assumed.',
       annotations: { readOnlyHint: true },
       inputSchema: { type: 'object', properties: {} },
       execute: () => {
@@ -1830,19 +1684,12 @@ function contextualTools(): ToolDef[] {
       tools.push({
         name: 'duet_take_part',
         description:
-          'Put your hand on one part of the picture, so the human knows not to start it. This ' +
-          'is the only coordination in a duet and it is worth doing before you paint rather ' +
-          'than after. Free right now: ' +
-          free
-            .map((p) => {
-              const blocked = studio.blockedBy(p)
-              return `"${p.id}" (${p.title}, suits the ${p.by}${
-                blocked.length ? `, wants ${blocked.map((b) => b.title).join(' and ')} down first` : ''
-              })`
-            })
-            .join('; ') +
-          '. A part marked for the human is still yours to take if they have said so; ' +
-          'nothing here is locked to one painter.',
+          'Put your hand on one part, so the human knows not to start it. Take one or two at a ' +
+          'time and paint them before taking more: a long list of claimed parts helps nobody and ' +
+          'the human cannot see what you intend to do with them. A part marked for the human is ' +
+          'still yours to take if they have said so. Free: ' +
+          free.map((p) => p.id).join(', ') +
+          '. duet_status has the brief for each.',
           inputSchema: {
           type: 'object',
           properties: {
@@ -1872,15 +1719,13 @@ function contextualTools(): ToolDef[] {
     }
 
     if (mine.length > 0) {
-      const brief = mine.map((p) => `"${p.title}": ${p.hint}`).join('\n\n')
       tools.push({
         name: 'duet_finish_part',
         description:
-          `Call a part painted and let it go, so the board shows it done. You are holding ` +
-          `${mine.map((p) => `"${p.id}"`).join(' and ')}.\n\n${brief}\n\n` +
-          'Paint it with the ordinary paint tool first, looking at the sheet before and after. ' +
-          'Do not call this before you have actually put paint down. Then take another free ' +
-          'part, or say what you are leaving for the human.',
+          'Call a part painted and let it go. Holding: ' +
+          mine.map((p) => p.id).join(', ') +
+          '. Paint it first and look at the sheet after. duet_status has the brief again if you ' +
+          'need it.',
           inputSchema: {
           type: 'object',
           properties: {
@@ -2328,16 +2173,49 @@ class ToolSurface {
    * fails the in-flight call. Letting the call settle first costs a tick and
    * makes self-modifying tools safe.
    */
+  /**
+   * How long the agent has to be quiet before the toolbox is allowed to change
+   * under it.
+   *
+   * The dynamic surface is the best thing this page does and it was being
+   * rebuilt at the worst possible instant. Taking a part of a duet changes the
+   * board, the board is written into the descriptions of the duet tools, and
+   * the rebuild was queued on a zero-delay timer, so it fired while the client
+   * was still handling the response to the call that caused it. A burst of
+   * takes meant a re-registration between every pair of calls, each one firing
+   * `toolchange` at a bridge that was mid-conversation, and connections were
+   * dying in the middle of sessions.
+   *
+   * Nothing here needs to be instant. The agent is told what the board looks
+   * like by the result of the call it just made; the descriptions only have to
+   * catch up before it decides what to do next. So the rebuild waits for the
+   * agent to stop talking, and a burst of twenty calls now costs one
+   * re-registration at the end instead of twenty during.
+   */
+  private static QUIET_MS = 1500
+  /** How often to re-check whether it has gone quiet. */
+  private static QUIET_POLL_MS = 400
+
   private scheduleSync(): void {
     const next = surfaceKey()
     if (next === this.key && this.slots.size > 0) return
     this.key = next
     if (this.syncQueued) return
     this.syncQueued = true
-    setTimeout(() => {
+    const attempt = () => {
+      // Never while a call is running, and never in the wake of one.
+      const since = Date.now() - this.lastCallAt
+      if (this.active !== null || (this.lastCallAt > 0 && since < ToolSurface.QUIET_MS)) {
+        setTimeout(attempt, ToolSurface.QUIET_POLL_MS)
+        return
+      }
       this.syncQueued = false
+      // The key may have moved on several times while we waited. Rebuilding
+      // against the current state is the point of having waited.
+      this.key = surfaceKey()
       void this.rebuildContextual()
-    }, 0)
+    }
+    setTimeout(attempt, 0)
   }
 
   private rebuildContextual(): Promise<void> {
