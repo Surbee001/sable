@@ -2036,7 +2036,22 @@ type StatusListener = (status: SurfaceStatus) => void
 
 class ToolSurface {
   private core: AbortController | null = null
-  private contextual: AbortController | null = null
+  /**
+   * One registration per contextual tool, against what it looked like.
+   *
+   * The rebuild used to abort the whole contextual batch and then re-register
+   * it, which meant that for the length of that loop every one of these tools
+   * was missing from `getTools()`. An agent calling two of them back to back
+   * lands in that window: taking a part of a duet changes the board, the board
+   * is in the description of the tool for taking parts, so the rebuild fires,
+   * and the very next call finds nothing to call. Two of nine rapid takes
+   * failed exactly that way.
+   *
+   * Holding a controller per tool means a tool whose definition has not changed
+   * is never taken down at all, and the one that did change is unavailable for a
+   * single await rather than for a whole batch.
+   */
+  private slots = new Map<string, { controller: AbortController; print: string }>()
   private key = ''
   private mounted = false
   private transport: SurfaceTransport = 'none'
@@ -2213,6 +2228,10 @@ class ToolSurface {
     this.context = context
     this.transport = transport
     this.key = ''
+    // A different context registers nothing yet, so the old slots describe
+    // registrations that no longer exist anywhere.
+    for (const slot of this.slots.values()) slot.controller.abort()
+    this.slots.clear()
     await this.registerCore()
     this.key = surfaceKey()
     await this.rebuildContextual()
@@ -2293,7 +2312,7 @@ class ToolSurface {
    */
   private scheduleSync(): void {
     const next = surfaceKey()
-    if (next === this.key && this.contextual) return
+    if (next === this.key && this.slots.size > 0) return
     this.key = next
     if (this.syncQueued) return
     this.syncQueued = true
@@ -2309,17 +2328,37 @@ class ToolSurface {
     this.pending = this.pending.then(async () => {
       const context = this.context
       if (!context) return
-      this.contextual?.abort()
-      this.contextual = new AbortController()
-      for (const tool of contextualTools()) {
-        try {
-          await context.registerTool(this.observed(tool) as never, {
-            signal: this.contextual.signal,
-          })
-        } catch {
-          // A tool name colliding with a still-unwinding abort is not fatal.
+      const wanted = contextualTools()
+      const names = new Set(wanted.map((t) => t.name))
+
+      // Anything that no longer belongs goes first. These are genuinely gone,
+      // so there is no window to protect.
+      for (const [name, slot] of this.slots) {
+        if (!names.has(name)) {
+          slot.controller.abort()
+          this.slots.delete(name)
         }
       }
+
+      for (const tool of wanted) {
+        const print = JSON.stringify([tool.title, tool.description, tool.inputSchema])
+        const prev = this.slots.get(tool.name)
+        // Unchanged since the last rebuild, so leave it registered. This is the
+        // whole point: selecting a mark must not briefly unregister the duet.
+        if (prev && prev.print === print) continue
+
+        prev?.controller.abort()
+        const controller = new AbortController()
+        try {
+          await context.registerTool(this.observed(tool) as never, { signal: controller.signal })
+          this.slots.set(tool.name, { controller, print })
+        } catch {
+          // A name colliding with a still-unwinding abort is not fatal, but the
+          // slot must not claim a registration that did not happen.
+          this.slots.delete(tool.name)
+        }
+      }
+
       this.refreshNames()
       this.emit()
     })
