@@ -686,7 +686,7 @@ function coreTools(): ToolDef[] {
           text,
           // The value study rather than the photograph: this tool is for
           // judging, and the photograph is the thing that hides the faults.
-          seen ? seen.image : snapshotScene(scene, { width: 760 }),
+          seen ? seen.image : snapshotScene(scene),
           {
             ...report,
             ...(seen ? { values: seen.values, weight: seen.weight, edges: seen.edges, focus: seen.focus } : {}),
@@ -862,7 +862,7 @@ function coreTools(): ToolDef[] {
               'a bloom wants something built around it, a lost edge wants one crisp mark near it, ' +
               'and a passage that is still open will never be this workable again.',
           ].join('\n'),
-          snapshotScene(scene, { width: 760 }),
+          snapshotScene(scene),
           {
             painted: made.map((s) => summariseStroke(scene, s)),
             ...(notes.length > 0 ? { notes } : {}),
@@ -948,7 +948,7 @@ function coreTools(): ToolDef[] {
         return show(
           `Revised ${revised.length} mark${revised.length === 1 ? '' : 's'}: ` +
             `${Object.keys(patch).join(', ')} changed.`,
-          snapshotScene(scene, { width: 760 }),
+          snapshotScene(scene),
           { strokes: revised.map((r) => summariseStroke(scene, r)) },
         )
       },
@@ -1025,7 +1025,7 @@ function coreTools(): ToolDef[] {
 
         return show(
           `${ids.length} stroke${ids.length === 1 ? '' : 's'} ${done.join(' and ')}.`,
-          snapshotScene(studio.getScene(), { width: 760 }),
+          snapshotScene(studio.getScene()),
         )
       },
     },
@@ -1049,7 +1049,7 @@ function coreTools(): ToolDef[] {
         if (gone === 0) return fail('None of those ids are on the sheet.')
         return show(
           `Lifted ${gone} stroke${gone === 1 ? '' : 's'}.`,
-          snapshotScene(studio.getScene(), { width: 760 }),
+          snapshotScene(studio.getScene()),
         )
       },
     },
@@ -1077,7 +1077,7 @@ function coreTools(): ToolDef[] {
         if (done === 0) return say('Nothing left to undo.')
         return show(
           `Stepped back ${done} action${done === 1 ? '' : 's'}.`,
-          snapshotScene(studio.getScene(), { width: 760 }),
+          snapshotScene(studio.getScene()),
         )
       },
     },
@@ -1098,7 +1098,7 @@ function coreTools(): ToolDef[] {
         if (done === 0) return say('Nothing to redo.')
         return show(
           `Stepped forward ${done} action${done === 1 ? '' : 's'}.`,
-          snapshotScene(studio.getScene(), { width: 760 }),
+          snapshotScene(studio.getScene()),
         )
       },
     },
@@ -1234,7 +1234,7 @@ function coreTools(): ToolDef[] {
           real.length === 0
             ? 'Deselected.'
             : `Selected ${real.length} mark${real.length === 1 ? '' : 's'} on the human\'s screen.`,
-          snapshotScene(studio.getScene(), { width: 760 }),
+          snapshotScene(studio.getScene()),
         )
       },
     },
@@ -1542,7 +1542,7 @@ function coreTools(): ToolDef[] {
           changed = true
         }
         if (!changed) return fail('Pass a paper from the enum, or a title.')
-        return show('Sheet updated.', snapshotScene(studio.getScene(), { width: 760 }))
+        return show('Sheet updated.', snapshotScene(studio.getScene()))
       },
     },
 
@@ -1599,7 +1599,7 @@ function coreTools(): ToolDef[] {
         return show(
           `Opened "${scene.title}". ${scene.strokes.length} marks, all of them editable. ` +
             'Call assess_painting to see what it needs.',
-          snapshotScene(studio.getScene(), { width: 760 }),
+          snapshotScene(studio.getScene()),
         )
       },
     },
@@ -1714,7 +1714,7 @@ function contextualTools(): ToolDef[] {
         studio.updateMany(ids, patch, 'agent', `Revised the human's selection`)
         return show(
           `Revised the selection (${ids.length} stroke${ids.length === 1 ? '' : 's'}).`,
-          snapshotScene(studio.getScene(), { width: 760 }),
+          snapshotScene(studio.getScene()),
         )
       },
     })
@@ -1756,7 +1756,7 @@ function contextualTools(): ToolDef[] {
           `"${score.title}" is open, on a fresh sheet. ${score.parts.length} parts, none of them ` +
             'taken. Call duet_status to see the board, then take one and paint it. Tell the ' +
             'human which you have taken so they do not start the same one.',
-          snapshotScene(studio.getScene(), { width: 760 }),
+          snapshotScene(studio.getScene()),
         )
       },
     })
@@ -1804,7 +1804,7 @@ function contextualTools(): ToolDef[] {
             ]
         return show(
           lines.filter(Boolean).join('\n\n'),
-          snapshotScene(studio.getScene(), { width: 760 }),
+          snapshotScene(studio.getScene()),
           {
             score: duet.score.id,
             title: duet.score.title,
@@ -1908,7 +1908,7 @@ function contextualTools(): ToolDef[] {
               (left.length === 0
                 ? 'Every part is off the board. The painting is finished.'
                 : `Still free: ${left.map((p) => p.title).join(', ')}.`),
-            snapshotScene(studio.getScene(), { width: 760 }),
+            snapshotScene(studio.getScene()),
           )
         },
       })
@@ -2097,6 +2097,17 @@ class ToolSurface {
       ...tool,
       title: tool.title ?? TITLES[tool.name],
       annotations: { ...HINTS[tool.name], ...tool.annotations },
+      /**
+       * Closed at the top level, which the documented shape of a WebMCP tool
+       * includes and none of these bothered to say. Nothing here has ever
+       * wanted a property it did not name, so saying so costs nothing and
+       * leaves one less thing for a strict validator on the other side to
+       * decide about on our behalf.
+       */
+      inputSchema:
+        tool.inputSchema.type === 'object' && tool.inputSchema.additionalProperties === undefined
+          ? { ...tool.inputSchema, additionalProperties: false }
+          : tool.inputSchema,
       execute: async (input: never) => {
         if (this.hold) {
           clearTimeout(this.hold)
@@ -2215,16 +2226,38 @@ class ToolSurface {
    * tools have to move across to it. Cheap to check and the alternative is an
    * agent staring at an empty toolbox.
    */
+  /**
+   * Watch for somebody better turning up, and stop the moment they have.
+   *
+   * The reason this exists is the polyfill: on a browser with no WebMCP of its
+   * own the page installs a context, and a bridge extension can attach a real
+   * one afterwards, at which point the tools have to move across to it. That is
+   * a transition out of `local` and nothing else.
+   *
+   * It used to keep polling forever, comparing `document.modelContext` by
+   * identity every second and re-adopting on any change. Against a browser that
+   * implements WebMCP itself that is a standing offer to abort and re-register
+   * two dozen tools, on a timer, for the life of the page, if that browser ever
+   * hands back a different object. Re-registration fires `toolchange`, and a
+   * client trying to enumerate the toolbox while it is being torn down and
+   * rebuilt is a fault this page would have caused and could not see.
+   *
+   * So once the context belongs to the browser or to an extension, the page
+   * stops touching it. It has what it came for.
+   */
   private watch(): void {
     if (this.watching) return
+    if (this.transport === 'native' || this.transport === 'bridge') return
     this.watching = true
     const startedAt = Date.now()
     const tick = async () => {
       const live = existing()
       if (live && live !== this.context) {
         await this.adopt(live, classify(live))
-      } else if (!this.context && live) {
-        await this.adopt(live, classify(live))
+      }
+      if (this.transport === 'native' || this.transport === 'bridge') {
+        this.watching = false
+        return
       }
       // Attentive for the first minute, then just occasionally.
       setTimeout(tick, Date.now() - startedAt < 60000 ? 1000 : 8000)

@@ -219,6 +219,33 @@ ever sees. The moment a real agent calls anything, the studio stops completely.
 It can tell, because tool calls are counted, and the tool surface is the thing the
 two of them already share.
 
+## What a tool call weighs
+
+An image content block is the right way to show an agent a wash, and it is also
+the easiest way to ruin the conversation it was meant to inform. A client that
+understands the block shows the model a picture. One that does not may put the
+base64 into the context as text, and `look_at_canvas` was handing back
+forty-four thousand characters, which is most of a small model's working memory
+spent on something it cannot read.
+
+Every image the studio returns is now bounded. It encodes, and if the result is
+over about twelve thousand characters it drops the quality once and then the
+dimensions until it fits. A watercolour is nearly all soft edges, so there is
+very little for the compressor to fight: the sheet that used to cost 44kB costs
+13kB and is no harder to judge. The ceiling matters more than the saving. No
+single call can swamp the context it is answering into, whatever the client on
+the other end does with it.
+
+The page also stops touching a context that already belongs to the browser. The
+watcher exists to catch a bridge extension attaching after the polyfill has
+installed a stand-in, which is a transition out of `local` and nothing else, and
+it used to keep comparing `document.modelContext` by identity every second for
+the life of the page. Against a browser with its own implementation that is a
+standing offer to abort and re-register two dozen tools on a timer, and
+re-registration fires `toolchange`. A client enumerating the toolbox while it is
+being torn down and rebuilt is a fault this page would have caused and could not
+have seen.
+
 ## When the bridge does not work
 
 An agent turned up in a browser that advertised WebMCP, found the tools this
@@ -316,8 +343,11 @@ npm install
 npm run dev      # then npm run build for a static production build
 ```
 
-WebMCP needs a browser exposing `document.modelContext`: recent Chrome with
-`--enable-features=WebMCP`, or ChatGPT's in-app browser. Elsewhere the polyfill
+WebMCP needs a browser exposing `document.modelContext`. The two the challenge
+names are the **ChatGPT desktop app's in-app browser**, where it is on by
+default and the page's tools appear under **Site tools** in the address bar, and
+**Chrome 149 or later** with `chrome://flags/#enable-webmcp-testing` turned on
+and the browser restarted. Elsewhere the polyfill
 installs it so the studio still works, and the Agent panel says plainly that
 nothing is connected.
 

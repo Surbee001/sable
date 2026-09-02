@@ -1,18 +1,36 @@
 # Testing Sable
 
+## The short version
+
+**In the ChatGPT desktop app.** Open the link in its in-app browser, which
+supports WebMCP by default, then open **Site tools** in the address bar to see
+the twenty-odd tools this page registers. Ask it to assess the painting and do
+what it needs. It is the desktop app specifically: the challenge names that
+surface, and other ChatGPT surfaces do not all carry the same browser.
+
+**Or in Chrome 149 or later.** Turn on `chrome://flags/#enable-webmcp-testing`,
+restart, and drive it with whatever agent you have.
+
+**Or in any browser at all.** The studio, the duet, the replay and the whole
+tool surface are still there, the Agent panel says plainly that nothing is
+connected, and the sheet still paints. Nothing here needs an agent to be worth
+looking at.
+
 ## How the judges reach it
 
 The rules ask for a **working live URL, accessible via ChatGPT's in-app browser
 or Chrome with WebMCP enabled**, plus a demo video under three minutes and a
-public repository.
+public repository. They also say judges **are not required to test the project**
+and may judge on the description, images and video alone, which is the reason
+the video has to show the tools being called rather than describe them.
 
 So a judge does one of three things:
 
-1. **Opens it in ChatGPT's in-app browser.** ChatGPT is the agent. This is the
-   path the rules name first and the one to optimise for.
-2. **Opens it in Chrome with the flag**, driven by whatever agent they have.
+1. **Opens it in the ChatGPT desktop app's in-app browser.** ChatGPT is the
+   agent. This is the path the rules name first and the one to optimise for.
+2. **Opens it in Chrome 149+ with the flag**, driven by whatever agent they have.
 3. **Opens it in an ordinary browser with no agent.** They still get the studio,
-   the duet, the timeline and the whole tool surface listed, and the Agent panel
+   the duet, the replay and the whole tool surface listed, and the Agent panel
    says plainly that nothing is connected. Assume this happens and let the video
    carry the rest.
 
@@ -21,20 +39,23 @@ So a judge does one of three things:
 | Where | `document.modelContext` | The panel says | Reachable by an agent |
 | --- | --- | --- | --- |
 | ChatGPT in-app browser | native | Native WebMCP | Yes |
-| Chrome, `--enable-features=WebMCP` | native | Native WebMCP | Yes, if one is attached |
+| Chrome 149+, `#enable-webmcp-testing` | native | Native WebMCP | Yes, if one is attached |
 | Chrome with an MCP bridge extension | supplied by the extension | Connected through an extension | Yes, relayed to your client |
 | Chrome, plain | polyfill | Polyfill only, nothing connected | No |
 | Anything without either | absent | Not available in this browser | No |
 
-Chrome 152 has **no** WebMCP by default and **does** have it behind the flag.
-Both were checked directly.
+Chrome has **no** WebMCP by default and **does** have it behind
+`chrome://flags/#enable-webmcp-testing`. Both were checked directly.
 
 ## Running it with a real agent
 
-### ChatGPT's in-app browser
+### The ChatGPT desktop app's in-app browser
 
-Needs a public URL, so deploy first, then open the link inside ChatGPT and ask
-it to paint. Good things to say:
+Needs a public URL, so deploy first, then open the link inside the desktop app
+and ask it to paint. The tools are listed under **Site tools** in the address
+bar; if that control shows them, registration worked and anything that goes
+wrong afterwards is between the runtime and the tools, not the page. Good things
+to say:
 
 - *"Assess the painting and do whatever it needs most."*
 - *"Start the fox, take the parts you want, and tell me which ones you are
@@ -45,12 +66,9 @@ it to paint. Good things to say:
 
 ### Chrome with the flag
 
-```bash
-open -na "Google Chrome" --args --enable-features=WebMCP
-```
-
-The flag exposes `document.modelContext` to the page. It does not by itself put
-an agent behind it, so pair it with a bridge extension or use the self check.
+Turn on `chrome://flags/#enable-webmcp-testing` and restart. That exposes
+`document.modelContext` to the page. It does not by itself put an agent behind
+it, so pair it with a bridge extension or use the self check below.
 
 ### A bridge extension into a desktop MCP client
 

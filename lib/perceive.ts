@@ -463,7 +463,9 @@ function squintImage(bands: Float32Array, width: number): string {
   if (!octx) throw new Error('2D canvas is unavailable in this browser')
   octx.imageSmoothingEnabled = false
   octx.drawImage(small, 0, 0, out.width, out.height)
-  return out.toDataURL('image/jpeg', 0.86).split(',')[1] ?? ''
+  // Four flat tones and nothing else, so the quality knob buys almost no
+  // fidelity here and costs real characters in a tool result.
+  return out.toDataURL('image/jpeg', 0.7).split(',')[1] ?? ''
 }
 
 export function perceive(scene: Scene, imageWidth = 620): Perception {

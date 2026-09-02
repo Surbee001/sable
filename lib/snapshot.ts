@@ -31,13 +31,69 @@ export interface SnapshotOptions {
   quality?: number
 }
 
+/**
+ * The most base64 any single tool result may carry.
+ *
+ * There is no way for the page to know what happens to an image content block
+ * once it leaves. A client that understands them shows the model a picture; one
+ * that does not may put the base64 into its context as text, and forty thousand
+ * characters of it is most of a small model's working memory spent on a wash it
+ * cannot read. Every image the studio hands out is therefore bounded, and a
+ * bound that is occasionally a little soft is a far better failure than one
+ * result that swamps the conversation it was meant to inform.
+ *
+ * Twelve thousand characters is about nine kilobytes of JPEG, which at these
+ * sizes is a legible watercolour, because a watercolour is mostly soft edges
+ * and there is very little here for the compressor to struggle with.
+ */
+const MAX_BASE64 = 12000
+
+/**
+ * Encode, and if it came out too big, encode again smaller.
+ *
+ * Quality first, because dropping it costs almost nothing on a soft image, then
+ * the dimensions once quality has stopped paying. Bounded to four attempts: the
+ * point is a ceiling, not the smallest possible file.
+ */
+function encodeWithin(
+  draw: (w: number, h: number) => HTMLCanvasElement,
+  width: number,
+  height: number,
+  quality: number,
+): string {
+  let w = width
+  let h = height
+  let q = quality
+  let out = ''
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const canvas = draw(Math.max(1, Math.round(w)), Math.max(1, Math.round(h)))
+    out = canvas.toDataURL('image/jpeg', q).split(',')[1] ?? ''
+    if (out.length <= MAX_BASE64) return out
+    if (attempt === 0) {
+      q = 0.6
+    } else {
+      const shrink = Math.max(0.5, Math.sqrt(MAX_BASE64 / out.length))
+      w *= shrink
+      h *= shrink
+    }
+  }
+  return out
+}
+
 /** Render the whole sheet to a base64 JPEG (no data: prefix). */
 export function snapshotScene(scene: Scene, options: SnapshotOptions = {}): string {
-  const w = Math.round(options.width ?? 760)
+  const w = Math.round(options.width ?? 640)
   const h = Math.round((w * CANVAS_H) / CANVAS_W)
-  const [canvas, ctx] = canvasOf(w, h)
-  renderScene(ctx, scene, w, h)
-  return canvas.toDataURL('image/jpeg', options.quality ?? 0.82).split(',')[1] ?? ''
+  return encodeWithin(
+    (cw, ch) => {
+      const [canvas, ctx] = canvasOf(cw, ch)
+      renderScene(ctx, scene, cw, ch)
+      return canvas
+    },
+    w,
+    h,
+    options.quality ?? 0.74,
+  )
 }
 
 /**
@@ -83,7 +139,19 @@ export function snapshotRegion(
     crop.height,
     0, 0, crop.width, crop.height,
   )
-  return crop.toDataURL('image/jpeg', options.quality ?? 0.85).split(',')[1] ?? ''
+  return encodeWithin(
+    (cw, ch) => {
+      if (cw === crop.width && ch === crop.height) return crop
+      const small = document.createElement('canvas')
+      small.width = cw
+      small.height = ch
+      small.getContext('2d')?.drawImage(crop, 0, 0, cw, ch)
+      return small
+    },
+    crop.width,
+    crop.height,
+    options.quality ?? 0.8,
+  )
 }
 
 /** Full-resolution PNG for the human to download. */
