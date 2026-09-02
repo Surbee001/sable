@@ -11,10 +11,10 @@ surface, and other ChatGPT surfaces do not all carry the same browser.
 **Or in Chrome 149 or later.** Turn on `chrome://flags/#enable-webmcp-testing`,
 restart, and drive it with whatever agent you have.
 
-**Or in any browser at all.** The studio, the duet, the replay and the whole
-tool surface are still there, the Agent panel says plainly that nothing is
-connected, and the sheet still paints. Nothing here needs an agent to be worth
-looking at.
+**Or in any browser at all.** The studio, the duet board, the replay and the
+whole tool surface are still there and the sheet still paints. The agent's parts
+of a score stay unpainted, because nothing here paints itself, and the Agent
+panel says plainly that nothing is connected.
 
 ## How the judges reach it
 
@@ -30,9 +30,10 @@ So a judge does one of three things:
    agent. This is the path the rules name first and the one to optimise for.
 2. **Opens it in Chrome 149+ with the flag**, driven by whatever agent they have.
 3. **Opens it in an ordinary browser with no agent.** They still get the studio,
-   the duet, the replay and the whole tool surface listed, and the Agent panel
-   says plainly that nothing is connected. Assume this happens and let the video
-   carry the rest.
+   the duet board, the replay and the whole tool surface listed, and the Agent
+   panel says plainly that nothing is connected. The agent's half of a score
+   stays blank, because nothing here paints itself. Assume this happens and let
+   the video carry the rest.
 
 ## What you see, per browser
 

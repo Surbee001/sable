@@ -787,16 +787,6 @@ class Studio {
     }
   }
 
-  /** Paint the reference version of a part, when nobody is connected to paint it. */
-  playPart(id: string): DuetPart | null {
-    const part = this.findPart(id)
-    if (!part || !part.reference || !this.duet) return null
-    if (this.duet.done.includes(part.id)) return null
-    this.paintMany(part.reference, 'agent', part.title.toLowerCase())
-    this.finishPart(part.id, 'agent')
-    return part
-  }
-
   /** A line from the agent addressed to the human, with no mark attached. */
   noteFromAgent(note: string): void {
     this.log('agent', 'note', note)

@@ -1,7 +1,6 @@
 'use client'
 
 import { ArrowUUpLeft, Check, CheckCircle, Circle, Hand, Play } from '@phosphor-icons/react'
-import { conductor } from '@/lib/conductor'
 import { SCORES, type DuetPart } from '@/lib/duet'
 import { studio } from '@/lib/store'
 import { useStudio } from '@/lib/useStudio'
@@ -10,16 +9,10 @@ import { Button } from './ui'
 /**
  * One painting, two painters, no queue.
  *
- * The old version of this panel told you whose turn it was. That was the whole
- * problem with it: half the time you spent in a duet was spent being told to
- * wait. A board of parts fixes it without giving up the thing the score was
- * for, which was making the two painters actually depend on each other. The
- * foliage still has to hang off branches somebody drew. It just no longer
- * matters who drew them or when.
- *
- * So the only state a part has is: painted, held by somebody, or free. Taking
- * one is how you tell the other painter what you are doing, and it is a click
- * here and a tool call there.
+ * A score is a board of named parts. Any part nobody is holding can be taken by
+ * either painter at any moment, and taking one is how you tell the other what
+ * you are doing. Nothing on this board moves by itself: the agent's parts are
+ * painted by an agent calling the tools, or they stay unpainted.
  */
 export function Duet() {
   const { duet } = useStudio()
@@ -28,9 +21,7 @@ export function Duet() {
     return (
       <>
         <p className="note note--lead">
-          A score is one picture broken into named parts, each with a brief. Nobody takes
-          turns: you and the agent both work the board, and taking a part is how you say
-          which one is yours.
+          One picture, split into parts. No turns: take any part, the agent takes others.
         </p>
         <div className="scores">
           {SCORES.map((score) => (
@@ -42,21 +33,16 @@ export function Duet() {
             >
               <span className="score-card-head">
                 <span className="score-card-title">{score.title}</span>
-                <span className="field-value">{score.parts.length} parts</span>
+                <span className="field-value">{score.parts.length}</span>
               </span>
               <span className="score-card-sub">{score.subtitle}</span>
-              <span className="score-card-blurb">{score.blurb}</span>
               <span className="score-card-go">
                 <Play size={11} weight="fill" />
-                Begin on a fresh sheet
+                Fresh sheet
               </span>
             </button>
           ))}
         </div>
-        <p className="note">
-          Ask your agent to <em>start the duet and take whatever it likes</em>. If nothing is
-          connected, the studio paints its parts itself so you can still see how it goes.
-        </p>
       </>
     )
   }
@@ -78,41 +64,35 @@ export function Duet() {
       <div className="duet-head">
         <span className="duet-title">{score.title}</span>
         <span className="field-value">
-          {painted.size} of {score.parts.length} painted
+          {painted.size} of {score.parts.length}
         </span>
       </div>
 
       {finished ? (
-        <p className="note note--lead">
-          Finished. Some of it is yours and some of it is not, and neither half would have
-          made sense on its own.
-        </p>
+        <p className="note note--lead">Finished. Some of it is yours and some of it is not.</p>
       ) : myPart ? (
         <div className="turn turn--human">
-          <span className="turn-who">You have this one</span>
+          <span className="turn-who">Yours</span>
           <span className="turn-title">{myPart.title}</span>
           <p className="turn-hint">{myPart.short}</p>
           {myPart.guides ? (
             <p className="note">
-              {traced} of {myPart.guides.length} traced. The mark is your line, not the guide.
+              {traced} of {myPart.guides.length} traced.
             </p>
           ) : null}
           <div className="turn-acts">
             <Button solid onClick={() => studio.finishPart(myPart.id, 'human')}>
               <Check size={11} weight="bold" />
-              Done with it
+              Done
             </Button>
             <Button onClick={() => studio.releasePart(myPart.id, 'human')}>
               <ArrowUUpLeft size={11} weight="bold" />
-              Put it back
+              Put back
             </Button>
           </div>
         </div>
       ) : (
-        <p className="note note--lead">
-          Take a part below, or just paint. The sheet is yours either way, and nothing is
-          waiting on you.
-        </p>
+        <p className="note note--lead">Take a part, or just paint.</p>
       )}
 
       <ol className="score">
@@ -137,7 +117,7 @@ export function Duet() {
                     blocked.length
                       ? `${part.short} Wants ${blocked
                           .map((b) => b.title.toLowerCase())
-                          .join(' and ')} down first.`
+                          .join(' and ')} first.`
                       : part.short
                   }
                   onClick={() => studio.takePart(part.id, 'human')}
@@ -147,7 +127,7 @@ export function Duet() {
                 </button>
               ) : (
                 <span className="score-state">
-                  {state === 'done' ? 'painted' : state === 'mine' ? 'yours' : 'agent'}
+                  {state === 'done' ? 'done' : state === 'mine' ? 'yours' : 'agent'}
                 </span>
               )}
               <span className={`dot ${part.by === 'agent' ? 'dot--agent' : 'dot--human'}`} />
@@ -156,15 +136,9 @@ export function Duet() {
         })}
       </ol>
 
-      <p className="note">
-        The dot says which painter a part suits. It is a suggestion, not a lock: take any of
-        them.{' '}
-        {conductor.attached
-          ? 'An agent is working, so the studio is keeping its hands off.'
-          : 'Nothing is connected, so the studio is painting the agent parts itself.'}
-      </p>
+      <p className="note">The dot suggests a painter. Take any of them.</p>
 
-      <Button onClick={() => studio.endDuet()}>Leave the score</Button>
+      <Button onClick={() => studio.endDuet()}>Leave</Button>
     </>
   )
 }

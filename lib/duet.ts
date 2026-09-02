@@ -1,4 +1,3 @@
-import type { PaintInput } from './store'
 import type { Author, BrushKind, PaperKind } from './types'
 
 /**
@@ -56,8 +55,6 @@ export interface DuetPart {
     fill: boolean
     layer: string
   }
-  /** What gets painted if nobody is connected to paint it. */
-  reference?: PaintInput[]
 }
 
 export interface DuetScore {
@@ -92,13 +89,6 @@ export const KAWA: DuetScore = {
         'A single large sun, low and warm, in the upper right. One flooded disc of dilute ' +
         'vermilion around 720,190 with a radius near 105. Keep the pigment load low, under 0.3: ' +
         'it sits behind everything else in the picture and must not compete with it.',
-      reference: [
-        {
-          path: 'M 720 190 m -105 0 a 105 105 0 1 0 210 0 a 105 105 0 1 0 -210 0 Z',
-          fill: true, pigment: 'cadmium-red', water: 0.9, opacity: 0.26,
-          layerId: 'Ground', note: 'the sun, kept pale so it stays behind everything',
-        },
-      ],
     },
     {
       id: 'far-hills',
@@ -109,13 +99,6 @@ export const KAWA: DuetScore = {
         'The distant range across the upper third, roughly y 230 to 360, running off both edges ' +
         'of the sheet. Use a granulating blue, cerulean or cobalt, very wet and very pale, ' +
         'under 0.3. Distance is made by keeping it weak, not by making it small.',
-      reference: [
-        {
-          path: 'M -30 350 L 120 252 L 214 302 L 332 216 L 432 292 L 542 240 L 652 312 L 782 246 L 902 302 L 1030 262 L 1030 372 L -30 372 Z',
-          fill: true, pigment: 'cerulean', water: 0.92, opacity: 0.26,
-          layerId: 'Ground', note: 'the far range, granulating and weak so it stays back',
-        },
-      ],
     },
     {
       id: 'near-ridge',
@@ -144,13 +127,6 @@ export const KAWA: DuetScore = {
         'The river, a flat band from about y 450 down to y 590, edge to edge. Very wet, very ' +
         'pale, cooler than the hills. Leave it almost empty: the paper showing through is the ' +
         'light on the water.',
-      reference: [
-        {
-          path: 'M -30 452 C 300 442 700 456 1030 444 L 1030 592 C 700 604 300 588 -30 598 Z',
-          fill: true, pigment: 'cobalt', water: 0.95, opacity: 0.2,
-          layerId: 'Ground', note: 'the river, left almost empty so the paper reads as light',
-        },
-      ],
     },
     {
       id: 'ripples',
@@ -180,13 +156,6 @@ export const KAWA: DuetScore = {
         'The bank in the foreground, from about y 570 to the bottom edge. A warmer, heavier ' +
         'green than anything above it, around 0.4 load. This is the closest thing in the ' +
         'picture, so it carries the most pigment.',
-      reference: [
-        {
-          path: 'M -30 586 C 220 558 520 574 1030 552 L 1030 730 L -30 730 Z',
-          fill: true, pigment: 'olive-green', water: 0.72, opacity: 0.4,
-          layerId: 'Body', note: 'the near bank, warmest and heaviest because it is closest',
-        },
-      ],
     },
     {
       id: 'grass',
@@ -252,23 +221,6 @@ export const KAWA: DuetScore = {
         'find where those branches actually ended, then hang the foliage on them rather than ' +
         'where you expected them to be. Three or four soft dark clusters, indigo over green, ' +
         'wet enough to bleed together. Not a solid mass: leave gaps for the sky.',
-      reference: [
-        {
-          path: 'M 78 396 C 40 384 22 356 44 344 C 30 322 62 306 92 320 C 110 300 148 310 148 334 C 172 344 166 374 138 380 C 122 402 92 406 78 396 Z',
-          fill: true, pigment: 'indigo', water: 0.72, opacity: 0.34,
-          layerId: 'Body', note: 'needles hung off the lower left branch, left ragged',
-        },
-        {
-          path: 'M 352 462 C 320 456 306 434 326 424 C 318 404 350 394 372 406 C 392 392 418 406 412 426 C 430 438 420 462 396 464 C 382 478 362 474 352 462 Z',
-          fill: true, pigment: 'olive-green', water: 0.74, opacity: 0.32,
-          layerId: 'Body', note: 'needles on the right branch',
-        },
-        {
-          path: 'M 92 314 C 62 306 52 282 74 274 C 68 256 96 246 116 258 C 134 244 158 258 152 276 C 168 288 158 310 134 310 C 122 322 102 322 92 314 Z',
-          fill: true, pigment: 'indigo', water: 0.7, opacity: 0.28,
-          layerId: 'Body',
-        },
-      ],
     },
     {
       id: 'rocks',
@@ -281,18 +233,6 @@ export const KAWA: DuetScore = {
         'y 560 to 610, so they break the join between the river and the bank. Granulating earth ' +
         'pigment, a harder edge than anything else in the picture. Call read_painting first and ' +
         'put them on the line the bank actually landed on.',
-      reference: [
-        {
-          path: 'M 792 592 C 830 560 888 566 918 594 C 938 614 896 632 840 628 C 804 624 788 610 792 592 Z',
-          fill: true, pigment: 'burnt-sienna', water: 0.4, opacity: 0.5,
-          layerId: 'Detail', note: 'a hard edge against all that softness',
-        },
-        {
-          path: 'M 706 614 C 736 594 776 598 790 616 C 800 632 768 644 732 640 C 712 636 702 624 706 614 Z',
-          fill: true, pigment: 'raw-umber', water: 0.42, opacity: 0.44,
-          layerId: 'Detail',
-        },
-      ],
     },
     {
       id: 'birds',
@@ -337,13 +277,6 @@ export const FOX: DuetScore = {
         'sheet, from about y 550 down, edge to edge. Cool: cerulean or cobalt under 0.2 load. ' +
         'Snow is not white paint, it is the paper with a cold shadow on it, so almost all of ' +
         'this should be paper.',
-      reference: [
-        {
-          path: 'M -30 552 C 240 534 640 546 1030 530 L 1030 730 L -30 730 Z',
-          fill: true, pigment: 'cerulean', water: 0.94, opacity: 0.1,
-          layerId: 'Ground', note: 'the snow, kept almost empty so the paper does the work',
-        },
-      ],
     },
     {
       id: 'body',
@@ -357,15 +290,6 @@ export const FOX: DuetScore = {
         'way an animal study dies, and the human is going to draw the head into this wash ' +
         'afterwards, which only works if it is a wash. Charge a little raw umber low down with ' +
         'the charge parameter so the underside cools without an edge appearing.',
-      reference: [
-        {
-          path: 'M 300 286 C 322 254 336 222 366 206 C 396 190 428 198 442 222 C 470 254 470 294 462 326 C 508 342 552 326 592 346 C 638 368 660 424 652 476 C 640 506 600 516 556 512 C 500 510 452 514 424 506 C 402 500 392 466 396 424 C 400 378 396 340 380 314 C 356 306 322 302 300 286 Z',
-          fill: true, pigment: 'burnt-sienna', water: 0.62, opacity: 0.5,
-          layerId: 'Body',
-          charge: [{ pigment: 'raw-umber', x: 520, y: 490, spread: 0.4, strength: 0.6 }],
-          note: 'one mass, charged cooler underneath rather than shaded as a second mark',
-        },
-      ],
     },
     {
       id: 'ears',
@@ -416,13 +340,6 @@ export const FOX: DuetScore = {
         '870 and y 400 to 555. Wetter than the body so the two fuse where they meet and there ' +
         'is no seam. A fox tail is nearly as much of the animal as the body is; if it looks too ' +
         'big it is about right.',
-      reference: [
-        {
-          path: 'M 648 420 C 712 394 792 406 838 454 C 876 494 858 544 802 550 C 742 556 676 516 646 474 Z',
-          fill: true, pigment: 'burnt-sienna', water: 0.7, opacity: 0.44,
-          layerId: 'Body', note: 'laid wet against the body so there is no seam between them',
-        },
-      ],
     },
     {
       id: 'tail-tip',
@@ -435,13 +352,6 @@ export const FOX: DuetScore = {
         'this studio and there is none in watercolour either. Paint a mark with lift set to ' +
         'true over the end of the tail: a thirsty brush pulls the pigment back out and the ' +
         'paper comes through. That is how the highlight is made.',
-      reference: [
-        {
-          path: 'M 800 548 C 834 534 858 506 856 476 C 830 484 806 510 792 534 Z',
-          fill: true, lift: true, pigment: 'burnt-sienna', water: 0.45, opacity: 0.6,
-          layerId: 'Body', note: 'lifted, not painted: the paper is the white',
-        },
-      ],
     },
     {
       id: 'chest',
@@ -453,13 +363,6 @@ export const FOX: DuetScore = {
         'The pale bib down the front of the chest, roughly x 395 to 465 and y 355 to 500. ' +
         'Almost nothing: a lifted mark that lets the paper up through the body wash. The light ' +
         'on an animal is the part you do not paint.',
-      reference: [
-        {
-          path: 'M 400 354 C 384 396 388 454 406 494 C 428 504 452 500 460 482 C 438 440 428 394 434 356 Z',
-          fill: true, lift: true, pigment: 'burnt-sienna', water: 0.5, opacity: 0.42,
-          layerId: 'Body', note: 'lifted out of the body rather than painted over it',
-        },
-      ],
     },
     {
       id: 'legs',
@@ -531,15 +434,6 @@ export const FOX: DuetScore = {
         'the ground. Read the painting first and find them. Cool and transparent, cobalt with a ' +
         'little rose charged into it, under 0.25 load. A shadow on snow is blue, never grey, ' +
         'and never brown.',
-      reference: [
-        {
-          path: 'M 392 568 C 500 548 700 552 880 574 C 760 600 490 602 392 568 Z',
-          fill: true, pigment: 'cobalt', water: 0.82, opacity: 0.22,
-          layerId: 'Ground',
-          charge: [{ pigment: 'permanent-rose', x: 470, y: 578, spread: 0.3, strength: 0.4 }],
-          note: 'blue, because a shadow on snow is the sky falling on it',
-        },
-      ],
     },
     {
       id: 'weeds',
@@ -560,23 +454,6 @@ export const FOX: DuetScore = {
         kind: 'liner', pigment: 'yellow-ochre', water: 0.2, pressure: 0.28,
         opacity: 0.6, fill: false, layer: 'Detail',
       },
-      reference: [
-        {
-          path: 'M 776 578 C 784 534 774 502 760 476',
-          pigment: 'yellow-ochre', water: 0.2, pressure: 0.28, opacity: 0.6,
-          kind: 'liner', layerId: 'Detail',
-        },
-        {
-          path: 'M 812 584 C 824 540 824 508 818 482',
-          pigment: 'raw-umber', water: 0.22, pressure: 0.26, opacity: 0.55,
-          kind: 'liner', layerId: 'Detail',
-        },
-        {
-          path: 'M 850 580 C 864 544 870 516 872 494',
-          pigment: 'yellow-ochre', water: 0.18, pressure: 0.24, opacity: 0.5,
-          kind: 'liner', layerId: 'Detail',
-        },
-      ],
     },
   ],
 }
@@ -604,15 +481,6 @@ export const JELLY: DuetScore = {
         'Permanent rose, wet, around 0.3 load, with a little quinacridone charged into the top ' +
         'so it is not one flat colour. Paint it on white paper and keep it light. Everything ' +
         'that happens to this picture afterwards makes it darker, and there is no way back.',
-      reference: [
-        {
-          path: 'M 306 300 C 300 214 372 148 462 148 C 552 148 624 214 618 300 C 566 272 512 262 462 262 C 412 262 360 272 306 300 Z',
-          fill: true, pigment: 'permanent-rose', water: 0.7, opacity: 0.3,
-          layerId: 'Ground',
-          charge: [{ pigment: 'quinacridone-rose', x: 462, y: 196, spread: 0.36, strength: 0.45 }],
-          note: 'painted on bare paper, because a glaze is coming over the top of it',
-        },
-      ],
     },
     {
       id: 'rim',
@@ -684,28 +552,6 @@ export const JELLY: DuetScore = {
         'size and half the strength of the first, with two or three soft threads under it. Two ' +
         'of anything at different distances is what turns a flat sheet into a body of water. ' +
         'Keep it under 0.16 load: it is far away, and distance is made by weakness.',
-      reference: [
-        {
-          path: 'M 748 212 C 744 164 782 130 830 130 C 878 130 916 164 912 212 C 882 196 856 192 830 192 C 802 192 776 196 748 212 Z',
-          fill: true, pigment: 'permanent-rose', water: 0.74, opacity: 0.16,
-          layerId: 'Ground', note: 'the same animal further away, made weaker rather than smaller',
-        },
-        {
-          path: 'M 772 214 C 762 262 776 306 758 358',
-          pigment: 'permanent-rose', water: 0.5, pressure: 0.18, opacity: 0.14,
-          kind: 'liner', layerId: 'Ground',
-        },
-        {
-          path: 'M 832 216 C 840 268 828 314 844 366',
-          pigment: 'permanent-rose', water: 0.5, pressure: 0.18, opacity: 0.14,
-          kind: 'liner', layerId: 'Ground',
-        },
-        {
-          path: 'M 890 212 C 902 258 888 302 902 348',
-          pigment: 'permanent-rose', water: 0.5, pressure: 0.16, opacity: 0.12,
-          kind: 'liner', layerId: 'Ground',
-        },
-      ],
     },
     {
       id: 'sea',
@@ -720,15 +566,6 @@ export const JELLY: DuetScore = {
         'This is a glaze, and it is the whole picture. Everything under it is pushed back into ' +
         'the water at once, which is a thing you cannot do by choosing a colour for each shape ' +
         'and is the reason watercolour is painted light to dark.',
-      reference: [
-        {
-          path: 'M -40 -40 L 1040 -40 L 1040 740 L -40 740 Z',
-          fill: true, pigment: 'indigo', water: 0.92, opacity: 0.42,
-          layerId: 'Ground',
-          grade: { angle: 90, fade: 0.6 },
-          note: 'a glaze over the animal, not a background behind it',
-        },
-      ],
     },
     {
       id: 'glow',
@@ -741,13 +578,6 @@ export const JELLY: DuetScore = {
         'lift set to true and a low load. This is the only way anything in this picture gets ' +
         'lighter after the glaze, and it is what stops the animal being a stain and makes it ' +
         'something lit from inside.',
-      reference: [
-        {
-          path: 'M 400 208 m -58 0 a 58 40 0 1 0 116 0 a 58 40 0 1 0 -116 0 Z',
-          fill: true, lift: true, pigment: 'permanent-rose', water: 0.72, opacity: 0.34,
-          layerId: 'Body', note: 'the light, taken back out rather than put on',
-        },
-      ],
     },
     {
       id: 'floor',
@@ -761,15 +591,6 @@ export const JELLY: DuetScore = {
         'knocked rather than painting each speck. Everything above this is a continuous shape ' +
         'with a continuous edge, and a picture made only of those has a smoothness that no ' +
         'water has. Keep the top of it broken so it is a floor and not a shelf.',
-      reference: [
-        {
-          path: 'M -30 664 C 140 630 300 656 470 640 C 640 624 820 652 1030 630 L 1030 740 L -30 740 Z',
-          fill: true, pigment: 'raw-umber', water: 0.44, opacity: 0.3,
-          layerId: 'Detail',
-          spatter: { density: 90, size: 3 },
-          note: 'the only grain in the picture, and it belongs at the front',
-        },
-      ],
     },
     {
       id: 'current',
@@ -789,18 +610,6 @@ export const JELLY: DuetScore = {
         kind: 'flat', pigment: 'cobalt', water: 0.78, pressure: 0.36,
         opacity: 0.14, fill: false, layer: 'Detail',
       },
-      reference: [
-        {
-          path: 'M 40 566 C 300 552 660 574 960 556',
-          pigment: 'cobalt', water: 0.78, pressure: 0.36, opacity: 0.14,
-          kind: 'flat', layerId: 'Detail',
-        },
-        {
-          path: 'M 90 636 C 340 624 690 646 950 630',
-          pigment: 'cobalt', water: 0.8, pressure: 0.34, opacity: 0.12,
-          kind: 'flat', layerId: 'Detail',
-        },
-      ],
     },
   ],
 }

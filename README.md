@@ -218,16 +218,17 @@ Dependencies advise rather than refuse. Foliage hung on branches nobody has draw
 is a worse painting, not an error, so the panel greys the part and names what is
 missing, and lets you take it anyway.
 
-Two things survive from the old version and both earn their place. The parts
-still make the painters need each other: the agent's foliage hangs off branches
-the human drew, and where those actually ended is not where the score imagined
-they would be, so its brief sends it to look first. And **the studio stands in**.
-Open this page with no agent behind it and the parts marked for one get painted
-anyway, one at a time, at the speed of somebody actually painting them, because a
-collaboration that needs a collaborator before it shows anything is one nobody
-ever sees. The moment a real agent calls anything, the studio stops completely.
-It can tell, because tool calls are counted, and the tool surface is the thing the
-two of them already share.
+What survives from the old version is the thing that made it worth building: the
+parts need each other. The agent's foliage hangs off branches the human drew, and
+where those actually ended is not where the score imagined they would be, so its
+brief sends it to look first.
+
+**Nothing on the board moves by itself.** For a while the studio would paint the
+agent's parts when nothing was connected, so the score still went somewhere on a
+page nobody had attached an agent to. It went, and it was a lie: a canvas
+animating itself is not a collaboration, and a demo of one is worth less than an
+empty sheet that tells the truth. The agent's parts are painted by an agent
+calling the tools, or they stay unpainted, and the panel says which.
 
 ## What a tool call weighs
 
@@ -374,7 +375,6 @@ lib/
   assess.ts       what the picture needs next, measured
   presence.ts     cursors, and when a mark appears rather than when it exists
   hand.ts         who is on the other end of the pointer
-  conductor.ts    the painter who shows up when nobody else does
   duet.ts         the three scores, and what each part of them is
   subjects.ts     how particular things are painted, pass by pass
   fallback-context.ts  our own document.modelContext, for when nothing supplies one

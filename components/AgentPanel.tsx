@@ -113,32 +113,20 @@ const TRANSPORT: Record<
   native: {
     dot: 'dot--live',
     label: 'Native WebMCP',
-    detail:
-      'The browser implements WebMCP itself and every tool below is registered with it. In ' +
-      "the ChatGPT desktop app they are listed under Site tools in the address bar. That is " +
-      'as far as this page can see: whether they reach your agent is up to the runtime behind ' +
-      'the browser, and one has already been met that advertises WebMCP and then refuses the ' +
-      'command that lists the tools. If yours does that, it can almost certainly still ' +
-      'evaluate JavaScript, and document.modelContext is right there. The recipe is three ' +
-      'lines and it is written into this page under "How to paint on this page", where an ' +
-      'agent reading the DOM will find it.',
+    detail: 'In ChatGPT, open Site tools in the address bar.',
   },
   bridge: { dot: 'dot--live', label: 'Connected through an extension' },
   local: {
     dot: 'dot--local',
     label: 'Registered in page',
     detail:
-      'All of these are registered on document.modelContext and live. This browser supplied ' +
-      'no context of its own, so the page installed one. If you are an agent and these tools ' +
-      'appear in your list, call them. If they do not, the browser is not bridging WebMCP to ' +
-      'you: try Chrome with chrome://flags/#enable-webmcp-testing, or a bridge extension.',
+      'Registered, but this browser bridges nothing to an agent. Use the ChatGPT desktop ' +
+      'app, or Chrome with chrome://flags/#enable-webmcp-testing.',
   },
   none: {
     dot: 'dot--off',
     label: 'No context could be installed',
-    detail:
-      'Nothing supplied document.modelContext and the page could not define one either, ' +
-      'which should not happen. The studio still works by hand.',
+    detail: 'The studio still works by hand.',
   },
 }
 
@@ -190,7 +178,7 @@ export function AgentPanel() {
         <div className="working">
           <span className="working-pip" />
           <span className="working-text">
-            Agent is calling <code>{status.activeTool}</code>
+            <code>{status.activeTool}</code>
           </span>
         </div>
       ) : null}
@@ -221,11 +209,9 @@ export function AgentPanel() {
 
       <p className="note note--spaced">
         {contextualCount > 0
-          ? `${contextualCount} exist only right now.`
+          ? `${contextualCount} exist${contextualCount === 1 ? "s" : ""} only right now.`
           : 'Select a mark and tools for it appear.'}
-        {status.callCount > 0
-          ? ` ${status.callCount} call${status.callCount === 1 ? '' : 's'} so far.`
-          : ''}
+        {status.callCount > 0 ? ` ${status.callCount} calls.` : ''}
       </p>
     </>
   )

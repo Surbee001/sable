@@ -10,7 +10,6 @@ import {
   Sun,
 } from '@phosphor-icons/react'
 import { useEffect, useState } from 'react'
-import { conductor } from '@/lib/conductor'
 import { hand, type Holder } from '@/lib/hand'
 import {
   clearTokenInUrl,
@@ -136,9 +135,6 @@ export function Studio() {
       stop?.()
     }
   }, [])
-
-  // Turns hand over on their own, whichever panel happens to be open.
-  useEffect(() => conductor.start(), [])
 
   // Register the tools as soon as the studio exists. This used to live in the
   // Agent panel, which meant the toolbox only came into being once that tab was

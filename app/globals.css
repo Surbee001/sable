@@ -1868,3 +1868,37 @@ body {
   box-shadow: var(--lift);
   animation: toast-in 0.24s var(--ease);
 }
+
+/* ------------------------------------------------------------------ *
+ * The panel scrolls, and its tabs do not go with it
+ * ------------------------------------------------------------------ */
+
+/*
+ * The rail is the scroller and the card is not.
+ *
+ * Both had `overflow-y: auto`, which on a short window is two nested scrollers
+ * with no height between them: the inner one never gets a scrollbar because it
+ * is free to grow, and the outer one ends up scrolling content that has already
+ * been clipped once. One scroller, on the rail, and the card simply takes the
+ * height it needs.
+ */
+.rail {
+  overscroll-behavior: contain;
+}
+
+.card {
+  overflow: visible;
+}
+
+/* So the tabs are still reachable from the bottom of a long score. */
+.card > .tabs {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding-bottom: 8px;
+  background: linear-gradient(var(--bg) 72%, transparent);
+}
+
+.dock-body {
+  overscroll-behavior: contain;
+}
